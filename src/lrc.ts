@@ -29,3 +29,13 @@ export function toLrc(lines: Line[], title = '', artist = '') {
   const head = [title && `[ti:${title}]`, artist && `[ar:${artist}]`].filter(Boolean)
   return [...head, ...lines.map((l) => (l.time != null ? `[${fmtTime(l.time)}]` : '') + l.text)].join('\n')
 }
+
+// Translations are stored per non-empty lyric line. Timed translations match by timestamp,
+// otherwise translation lines are taken in order.
+export function alignTranslation(lines: Line[], src: string): string[] {
+  const tr = parseLyrics(src).filter((l) => l.text)
+  const lyric = lines.filter((l) => l.text)
+  if (tr.length && tr.every((l) => l.time != null) && lyric.every((l) => l.time != null))
+    return lyric.map((l) => tr.find((t) => Math.abs(t.time! - l.time!) < 0.5)?.text ?? '')
+  return tr.map((l) => l.text)
+}

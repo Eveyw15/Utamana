@@ -7,6 +7,7 @@ export type Song = {
   title: string
   artist: string
   lines: Line[]
+  trans?: string[] // one per non-empty lyric line
   audio: Partial<Record<TrackKey, Blob>>
   updated: number
 }

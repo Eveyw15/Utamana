@@ -2,11 +2,47 @@ import react from '@vitejs/plugin-react'
 import { spawn } from 'node:child_process'
 import { defineConfig, type Plugin } from 'vite'
 
-// GET /api/audio?url=... downloads the audio track of a Bilibili/YouTube video with yt-dlp (must be on PATH).
+// Local API for the dev server.
 // shortcut: only works under `npm run dev` / `npm run preview`, a static build has no server.
-function ytdlp(): Plugin {
+
+// shortcut: unofficial Google Translate endpoint (no key), may break or rate-limit; swap for a keyed API if it does.
+async function googleTranslate(text: string) {
+  const res = await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=ja&tl=zh-CN&dt=t', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ q: text }),
+  })
+  if (!res.ok) throw new Error(`Google 翻译返回 ${res.status}`)
+  const data = (await res.json()) as [[string, string][]]
+  return data[0].map((s) => s[0]).join('')
+}
+
+// POST /api/translate {lines: string[]} -> string[], one translation per line.
+async function translateLines(lines: string[]) {
+  const out = (await googleTranslate(lines.join('\n'))).split('\n').map((s) => s.trim())
+  // Google occasionally merges lines; fall back to one request per line so rows stay aligned.
+  return out.length === lines.length ? out : Promise.all(lines.map((l) => googleTranslate(l)))
+}
+
+// GET /api/audio?url=... downloads the audio track of a Bilibili/YouTube video with yt-dlp (must be on PATH).
+function localApi(): Plugin {
   const handler = (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse, next: () => void) => {
     const u = new URL(req.url ?? '', 'http://x')
+    if (u.pathname === '/api/translate' && req.method === 'POST') {
+      let body = ''
+      req.on('data', (c: Buffer) => (body += c))
+      req.on('end', async () => {
+        try {
+          const { lines } = JSON.parse(body) as { lines: string[] }
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify(await translateLines(lines)))
+        } catch (e) {
+          res.statusCode = 502
+          res.end(String(e))
+        }
+      })
+      return
+    }
     if (u.pathname !== '/api/audio') return next()
     const target = u.searchParams.get('url') ?? ''
     const fail = (code: number, msg: string) => {
@@ -31,7 +67,7 @@ function ytdlp(): Plugin {
     res.on('close', () => !res.writableFinished && p.kill())
   }
   return {
-    name: 'ytdlp',
+    name: 'local-api',
     configureServer: (s) => void s.middlewares.use(handler),
     configurePreviewServer: (s) => void s.middlewares.use(handler),
   }
@@ -39,5 +75,5 @@ function ytdlp(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), ytdlp()],
+  plugins: [react(), localApi()],
 })

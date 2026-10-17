@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { KANJI, annotateLine, setReading, type Annotated, type Seg } from './furigana'
-import { fmtTime, parseLyrics, toLrc } from './lrc'
+import { alignTranslation, fmtTime, parseLyrics, toLrc } from './lrc'
 import { Player, TRACK_LABEL, type TrackKey } from './player'
 import { deleteSong, listSongs, loadSong, saveSong, type Song, type SongMeta } from './db'
 
@@ -17,9 +17,10 @@ function download(name: string, data: Blob | string) {
   URL.revokeObjectURL(a.href)
 }
 
-type LineProps = { a?: Annotated; show: { kana: boolean; romaji: boolean }; onRuby: (s: Seg) => void }
+type Show = { kana: boolean; romaji: boolean; trans: boolean }
+type LineProps = { a?: Annotated; trans?: string; show: Show; onRuby: (s: Seg) => void }
 
-function LyricLine({ a, show, onRuby }: LineProps) {
+function LyricLine({ a, trans, show, onRuby }: LineProps) {
   if (!a) return null
   const click = (s: Seg) => (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -40,6 +41,7 @@ function LyricLine({ a, show, onRuby }: LineProps) {
         )}
       </div>
       {show.romaji && a.romaji && <div className="romaji">{a.romaji}</div>}
+      {show.trans && trans && <div className="trans">{trans}</div>}
     </>
   )
 }
@@ -53,7 +55,8 @@ export default function App() {
   const [fetching, setFetching] = useState(false)
   const [annotated, setAnnotated] = useState<Annotated[]>([])
   const [dictError, setDictError] = useState('')
-  const [show, setShow] = useState({ kana: true, romaji: true })
+  const [show, setShow] = useState<Show>({ kana: true, romaji: true, trans: true })
+  const [translating, setTranslating] = useState(false)
   const [, rerender] = useState(0)
   const [time, setTime] = useState(0)
   const [tempo, setTempo] = useState(1)
@@ -183,6 +186,22 @@ export default function App() {
     }
   }
 
+  async function autoTranslate() {
+    if (song!.trans?.some(Boolean) && !confirm('覆盖现有翻译？')) return
+    setTranslating(true)
+    try {
+      // Drop 漢字{よみ} overrides so the translator sees plain lyrics.
+      const lines = song!.lines.filter((l) => l.text).map((l) => l.text.replace(/{[^}]*}/g, ''))
+      const res = await fetch('/api/translate', { method: 'POST', body: JSON.stringify({ lines }) })
+      if (!res.ok) return alert(`翻译失败：${await res.text()}`)
+      await update({ trans: await res.json() })
+    } catch (e) {
+      alert(`翻译失败：${e}`)
+    } finally {
+      setTranslating(false)
+    }
+  }
+
   function setLine(i: number, text: string) {
     update({ lines: song!.lines.map((l, j) => (j === i ? { ...l, text } : l)) })
   }
@@ -299,6 +318,29 @@ export default function App() {
               }}
             />
           </section>
+
+          <section>
+            <h2>翻译</h2>
+            <p className="hint">一行对应一句歌词（空行不算）。带时间轴的 LRC 翻译会按时间对齐。</p>
+            <div className="row">
+              <label className="button">
+                导入翻译 .txt / .lrc
+                <input hidden type="file" accept=".txt,.lrc,text/plain" onChange={async (e) => {
+                  const f = e.target.files?.[0]
+                  if (f) update({ trans: alignTranslation(song.lines, await f.text()) })
+                }} />
+              </label>
+              <button disabled={!song.lines.length || translating} onClick={autoTranslate}>
+                {translating ? '翻译中…' : '自动翻译（Google）'}
+              </button>
+            </div>
+            <textarea
+              className="short"
+              value={(song.trans ?? []).join('\n')}
+              spellCheck={false}
+              onChange={(e) => update({ trans: e.target.value.split('\n') })}
+            />
+          </section>
         </main>
       )}
 
@@ -380,6 +422,10 @@ export default function App() {
               <input type="checkbox" checked={show.romaji} onChange={(e) => setShow({ ...show, romaji: e.target.checked })} />
               罗马音
             </label>
+            <label>
+              <input type="checkbox" checked={show.trans} onChange={(e) => setShow({ ...show, trans: e.target.checked })} />
+              翻译
+            </label>
             {hasAudio &&
               (syncAt == null ? (
                 <button onClick={() => (setSyncAt(0), player.seek(0), player.play())}>{timed ? '重新打点' : '开始打点'}</button>
@@ -403,14 +449,14 @@ export default function App() {
         </h1>
         {!song.lines.length && <p className="hint no-print">还没有歌词，去「编辑」里粘贴。</p>}
         <ol>
-          {song.lines.map((l, i) => (
+          {song.lines.map((l, i, all) => (
             <li
               key={i}
               ref={i === active ? activeRef : undefined}
               className={[!l.text && 'gap', i === active && 'active', i === nextSync && 'next'].filter(Boolean).join(' ')}
               onClick={() => l.time != null && syncAt == null && (player.seek(l.time), setTime(l.time))}
             >
-              {l.text && <LyricLine a={annotated[i]} show={show} onRuby={(s) => editReading(i, s)} />}
+              {l.text && <LyricLine a={annotated[i]} trans={song.trans?.[all.slice(0, i).filter((x) => x.text).length]} show={show} onRuby={(s) => editReading(i, s)} />}
               {l.text && (
                 <button className="edit-line no-print" title="修改这句歌词" onClick={(e) => (e.stopPropagation(), editLine(i))}>
                   ✎

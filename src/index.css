@@ -70,3 +70,6 @@ ruby.editable:hover { background: var(--hl); outline: 1px dashed var(--accent); 
 .edit-line { position: absolute; right: 6px; top: 6px; opacity: 0; padding: 0 6px; }
 .sheet li:hover .edit-line { opacity: .7; }
 @media print { ruby.editable { outline: none; } }
+.trans { font-size: 14px; color: var(--fg); opacity: .8; }
+textarea.short { min-height: 25vh; }
+@media print { .trans { font-size: 11px; } }
