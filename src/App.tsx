@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { KANJI, annotateLine, setReading, type Annotated, type Seg } from './furigana'
 import { alignTranslation, fmtTime, parseLyrics, toLrc } from './lrc'
 import { Player, TRACK_LABEL, type TrackKey } from './player'
+import { FONTS, applyFonts, loadFonts, type FontSettings } from './fonts'
 import { deleteSong, listSongs, loadSong, saveSong, type Song, type SongMeta } from './db'
 
 const player = new Player()
@@ -46,6 +47,24 @@ function LyricLine({ a, trans, show, onRuby }: LineProps) {
   )
 }
 
+function FontPicker({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const custom = !FONTS.some((f) => f.css === value)
+  return (
+    <label>
+      {label}
+      <select value={custom ? '' : value} onChange={(e) => onChange(e.target.value)}>
+        {FONTS.map((f) => (
+          <option key={f.css} value={f.css}>
+            {f.label}
+          </option>
+        ))}
+        <option value="">本机字体…</option>
+      </select>
+      {custom && <input value={value} placeholder="已安装的字体名，如 MiSans" onChange={(e) => onChange(e.target.value)} />}
+    </label>
+  )
+}
+
 export default function App() {
   const [songs, setSongs] = useState<SongMeta[]>([])
   const [song, setSong] = useState<Song | null>(null)
@@ -63,6 +82,10 @@ export default function App() {
   const [semi, setSemi] = useState(0)
   const [syncAt, setSyncAt] = useState<number | null>(null)
   const activeRef = useRef<HTMLLIElement>(null)
+  const [fonts, setFonts] = useState<FontSettings>(loadFonts)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
+  useEffect(() => applyFonts(fonts), [fonts])
 
   useEffect(() => {
     player.onState = () => rerender((n) => n + 1)
@@ -249,6 +272,25 @@ export default function App() {
             编辑
           </button>
         </nav>
+        <button className={`gear ${settingsOpen ? 'on' : ''}`} title="设置" onClick={() => setSettingsOpen(!settingsOpen)}>
+          设置
+        </button>
+        {settingsOpen && (
+          <div className="settings">
+            <FontPicker label="界面字体" value={fonts.ui} onChange={(ui) => setFonts({ ...fonts, ui })} />
+            <FontPicker label="歌词字体" value={fonts.lyric} onChange={(lyric) => setFonts({ ...fonts, lyric })} />
+            <p className="jp preview">
+              <ruby>
+                明日<rt>あした</rt>
+              </ruby>
+              の
+              <ruby>
+                空<rt>そら</rt>
+              </ruby>
+              を見上げて
+            </p>
+          </div>
+        )}
       </header>
 
       {dictError && <p className="error no-print">词典加载失败：{dictError}</p>}
