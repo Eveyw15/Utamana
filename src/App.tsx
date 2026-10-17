@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { annotateLine, type Annotated } from './furigana'
+import { KANJI, annotateLine, setReading, type Annotated, type Seg } from './furigana'
 import { fmtTime, parseLyrics, toLrc } from './lrc'
 import { Player, TRACK_LABEL, type TrackKey } from './player'
 import { deleteSong, listSongs, loadSong, saveSong, type Song, type SongMeta } from './db'
@@ -9,24 +9,30 @@ const TRACKS: TrackKey[] = ['original', 'vocals', 'instrumental']
 
 const newSong = (): Song => ({ id: crypto.randomUUID(), title: '新歌曲', artist: '', lines: [], audio: {}, updated: 0 })
 
-function download(name: string, text: string) {
+function download(name: string, data: Blob | string) {
   const a = document.createElement('a')
-  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }))
+  a.href = URL.createObjectURL(typeof data === 'string' ? new Blob([data], { type: 'text/plain' }) : data)
   a.download = name
   a.click()
   URL.revokeObjectURL(a.href)
 }
 
-function LyricLine({ a, show }: { a?: Annotated; show: { kana: boolean; romaji: boolean } }) {
+type LineProps = { a?: Annotated; show: { kana: boolean; romaji: boolean }; onRuby: (s: Seg) => void }
+
+function LyricLine({ a, show, onRuby }: LineProps) {
   if (!a) return null
+  const click = (s: Seg) => (e: React.MouseEvent) => {
+    e.stopPropagation()
+    onRuby(s)
+  }
   return (
     <>
       <div className="jp">
         {a.segs.map((s, i) =>
-          s.ruby && show.kana ? (
-            <ruby key={i}>
+          KANJI.test(s.text) ? (
+            <ruby key={i} className="editable" title="点击修改读音" onClick={click(s)}>
               {s.text}
-              <rt>{s.ruby}</rt>
+              {show.kana && <rt>{s.ruby}</rt>}
             </ruby>
           ) : (
             <span key={i}>{s.text}</span>
@@ -43,6 +49,8 @@ export default function App() {
   const [song, setSong] = useState<Song | null>(null)
   const [tab, setTab] = useState<'edit' | 'practice'>('edit')
   const [draft, setDraft] = useState('')
+  const [link, setLink] = useState('')
+  const [fetching, setFetching] = useState(false)
   const [annotated, setAnnotated] = useState<Annotated[]>([])
   const [dictError, setDictError] = useState('')
   const [show, setShow] = useState({ kana: true, romaji: true })
@@ -161,6 +169,34 @@ export default function App() {
     applyDefaultGains({ ...song!, audio })
   }
 
+  async function importLink() {
+    setFetching(true)
+    try {
+      const res = await fetch(`/api/audio?url=${encodeURIComponent(link.trim())}`)
+      if (!res.ok) return alert(`导入失败：${await res.text()}`)
+      await setAudio('original', new File([await res.blob()], `${song!.title}.m4a`))
+      setLink('')
+    } catch (e) {
+      alert(`导入失败：${e}`)
+    } finally {
+      setFetching(false)
+    }
+  }
+
+  function setLine(i: number, text: string) {
+    update({ lines: song!.lines.map((l, j) => (j === i ? { ...l, text } : l)) })
+  }
+
+  function editReading(i: number, s: Seg) {
+    const r = prompt(`「${s.text}」的读音（假名或罗马音，留空恢复自动）`, s.ruby ?? '')
+    if (r != null) setLine(i, setReading(song!.lines[i].text, s, r))
+  }
+
+  function editLine(i: number) {
+    const t = prompt('修改歌词（读音可写成 漢字{よみ}）', song!.lines[i].text)
+    if (t != null) setLine(i, t.trim())
+  }
+
   async function importLyrics(file?: File) {
     if (!file) return
     const text = await file.text()
@@ -219,6 +255,12 @@ export default function App() {
           <section>
             <h2>音频</h2>
             <p className="hint">用 MISST / UVR 分离出人声和伴奏后分别上传，练习页可以调人声音量。只有原曲也可以。</p>
+            <div className="row">
+              <input className="grow" placeholder="粘贴 B站 / YouTube 链接，导入为原曲" value={link} onChange={(e) => setLink(e.target.value)} />
+              <button disabled={!link.trim() || fetching} onClick={importLink}>
+                {fetching ? '下载中…' : '从链接导入'}
+              </button>
+            </div>
             {TRACKS.map((k) => (
               <div className="row" key={k}>
                 <span className="track">{TRACK_LABEL[k]}</span>
@@ -226,6 +268,7 @@ export default function App() {
                 {song.audio[k] && (
                   <>
                     <span className="hint">{(song.audio[k] as File).name ?? '已上传'}</span>
+                    <button onClick={() => download((song.audio[k] as File).name ?? `${song.title}-${TRACK_LABEL[k]}`, song.audio[k]!)}>保存到本地</button>
                     <button onClick={() => setAudio(k)}>移除</button>
                   </>
                 )}
@@ -367,7 +410,12 @@ export default function App() {
               className={[!l.text && 'gap', i === active && 'active', i === nextSync && 'next'].filter(Boolean).join(' ')}
               onClick={() => l.time != null && syncAt == null && (player.seek(l.time), setTime(l.time))}
             >
-              {l.text && <LyricLine a={annotated[i]} show={show} />}
+              {l.text && <LyricLine a={annotated[i]} show={show} onRuby={(s) => editReading(i, s)} />}
+              {l.text && (
+                <button className="edit-line no-print" title="修改这句歌词" onClick={(e) => (e.stopPropagation(), editLine(i))}>
+                  ✎
+                </button>
+              )}
             </li>
           ))}
         </ol>

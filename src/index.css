@@ -63,3 +63,10 @@ rt { font-size: 11px; color: var(--muted); }
   .romaji { font-size: 10px; }
   rt { font-size: 8px; }
 }
+
+ruby.editable { cursor: pointer; border-radius: 3px; }
+ruby.editable:hover { background: var(--hl); outline: 1px dashed var(--accent); }
+.sheet li { position: relative; }
+.edit-line { position: absolute; right: 6px; top: 6px; opacity: 0; padding: 0 6px; }
+.sheet li:hover .edit-line { opacity: .7; }
+@media print { ruby.editable { outline: none; } }

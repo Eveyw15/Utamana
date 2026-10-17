@@ -1,7 +1,8 @@
 import type kuromoji from 'kuromoji'
 import { toHiragana, toRomaji } from 'wanakana'
 
-export type Seg = { text: string; ruby?: string }
+// at/len: where this segment sits in the source line, so an edited reading can be written back.
+export type Seg = { text: string; ruby?: string; at?: number; len?: number }
 export type Annotated = { segs: Seg[]; romaji: string }
 
 let tokenizerPromise: Promise<kuromoji.Tokenizer<kuromoji.IpadicFeatures>> | null = null
@@ -13,7 +14,7 @@ export function getTokenizer() {
   return tokenizerPromise
 }
 
-const KANJI = /[々一-鿿㐀-䶿豈-﫿]/
+export const KANJI = /[々一-鿿㐀-䶿豈-﫿]/
 const KANJI_RUN = /([々一-鿿㐀-䶿豈-﫿]+)/
 // Manual reading override in lyrics text: 漢字{かんじ}
 const OVERRIDE = new RegExp(`(${KANJI.source}+)\\{([^}]*)\\}`, 'g')
@@ -39,12 +40,16 @@ function glues(t: kuromoji.IpadicFeatures, prev: string | undefined) {
   return !!prev && (t.pos === '助動詞' || t.pos_detail_1 === '接続助詞' || t.pos_detail_1 === '接尾' || prev.endsWith('っ'))
 }
 
-function annotatePlain(tok: kuromoji.Tokenizer<kuromoji.IpadicFeatures>, text: string, segs: Seg[], words: string[]) {
+function annotatePlain(tok: kuromoji.Tokenizer<kuromoji.IpadicFeatures>, text: string, base: number, segs: Seg[], words: string[]) {
   for (const t of tok.tokenize(text)) {
     const surface = t.surface_form
-    if (/^s+$/.test(surface)) continue
+    if (/^\s+$/.test(surface)) continue
     const reading = t.reading && t.reading !== '*' ? toHiragana(t.reading) : null
-    segs.push(...(reading ? alignRuby(surface, reading) : [{ text: surface }]))
+    let at = base + t.word_position - 1
+    for (const s of reading ? alignRuby(surface, reading) : [{ text: surface }]) {
+      segs.push({ ...s, at, len: s.text.length })
+      at += s.text.length
+    }
     if (t.pos === '記号') continue
     const kana = (t.pos === '助詞' && PARTICLE[surface]) || reading || surface
     const prev = words[words.length - 1]
@@ -59,11 +64,17 @@ export async function annotateLine(line: string): Promise<Annotated> {
   const words: string[] = []
   let last = 0
   for (const m of line.matchAll(OVERRIDE)) {
-    annotatePlain(tok, line.slice(last, m.index), segs, words)
-    segs.push({ text: m[1], ruby: m[2] })
+    annotatePlain(tok, line.slice(last, m.index), last, segs, words)
+    segs.push({ text: m[1], ruby: m[2], at: m.index, len: m[0].length })
     words.push(m[2])
     last = m.index! + m[0].length
   }
-  annotatePlain(tok, line.slice(last), segs, words)
+  annotatePlain(tok, line.slice(last), last, segs, words)
   return { segs, romaji: words.map((w) => toRomaji(w)).join(' ').trim() }
+}
+
+// Write a reading back into the lyric line as 漢字{よみ}; an empty reading drops the override.
+export function setReading(line: string, seg: Seg, reading: string) {
+  const kana = toHiragana(reading.trim())
+  return line.slice(0, seg.at) + (kana ? `${seg.text}{${kana}}` : seg.text) + line.slice(seg.at! + seg.len!)
 }
