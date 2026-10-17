@@ -47,7 +47,7 @@ textarea { width: 100%; min-height: 50vh; font: 15px/1.6 ui-monospace, Consolas,
 .sheet li.gap { height: 12px; padding: 0; }
 .sheet li.active { background: var(--hl); border-left-color: var(--accent); }
 .sheet li.next { border-left-color: var(--muted); border-left-style: dashed; }
-.jp { font-size: 20px; line-height: 2.1; }
+.jp { font-size: 20px; line-height: 2.1; white-space: pre-wrap; }
 rt { font-size: 11px; color: var(--muted); }
 .romaji { font-size: 13px; color: var(--muted); }
 .print-only { display: none; }

@@ -43,14 +43,13 @@ function glues(t: kuromoji.IpadicFeatures, prev: string | undefined) {
 function annotatePlain(tok: kuromoji.Tokenizer<kuromoji.IpadicFeatures>, text: string, base: number, segs: Seg[], words: string[]) {
   for (const t of tok.tokenize(text)) {
     const surface = t.surface_form
-    if (/^\s+$/.test(surface)) continue
     const reading = t.reading && t.reading !== '*' ? toHiragana(t.reading) : null
     let at = base + t.word_position - 1
     for (const s of reading ? alignRuby(surface, reading) : [{ text: surface }]) {
       segs.push({ ...s, at, len: s.text.length })
       at += s.text.length
     }
-    if (t.pos === '記号') continue
+    if (t.pos === '記号' || /^\s+$/.test(surface)) continue
     const kana = (t.pos === '助詞' && PARTICLE[surface]) || reading || surface
     const prev = words[words.length - 1]
     if (glues(t, prev)) words[words.length - 1] += kana
