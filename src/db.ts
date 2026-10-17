@@ -11,18 +11,54 @@ export type Song = {
   audio: Partial<Record<TrackKey, Blob>>
   updated: number
 }
-export type SongMeta = Pick<Song, 'id' | 'title' | 'artist' | 'updated'>
+
+// Summary kept in the index so the library page does not load every song's audio.
+export type SongMeta = Pick<Song, 'id' | 'title' | 'artist' | 'updated'> & {
+  first?: string
+  lines?: number
+  tracks?: number
+  timed?: boolean
+  trans?: boolean
+}
 
 const INDEX = 'songs'
 
-export const listSongs = async () => ((await get<SongMeta[]>(INDEX)) ?? []).sort((a, b) => b.updated - a.updated)
+function summary(s: Song): SongMeta {
+  const text = s.lines.filter((l) => l.text)
+  return {
+    id: s.id,
+    title: s.title,
+    artist: s.artist,
+    updated: s.updated,
+    first: text[0]?.text.replace(/\{[^}]*\}/g, ''),
+    lines: text.length,
+    tracks: Object.keys(s.audio).length,
+    timed: text.some((l) => l.time != null),
+    trans: !!s.trans?.some(Boolean),
+  }
+}
+
 export const loadSong = (id: string) => get<Song>(`song:${id}`)
+
+export async function listSongs() {
+  let list = (await get<SongMeta[]>(INDEX)) ?? []
+  // Rebuild summaries saved by older versions that lacked the card fields.
+  if (list.some((s) => s.lines == null)) {
+    list = await Promise.all(
+      list.map(async (s) => {
+        const full = await loadSong(s.id)
+        return full ? summary(full) : s
+      }),
+    )
+    await set(INDEX, list)
+  }
+  return list.sort((a, b) => b.updated - a.updated)
+}
 
 export async function saveSong(song: Song) {
   song.updated = Date.now()
   await set(`song:${song.id}`, song)
-  const { id, title, artist, updated } = song
-  await set(INDEX, [...(await listSongs()).filter((s) => s.id !== id), { id, title, artist, updated }])
+  await set(INDEX, [...(await listSongs()).filter((s) => s.id !== song.id), summary(song)])
 }
 
 export async function deleteSong(id: string) {

@@ -49,7 +49,7 @@ function LyricLine({ a, trans, show, onRuby }: LineProps) {
 export default function App() {
   const [songs, setSongs] = useState<SongMeta[]>([])
   const [song, setSong] = useState<Song | null>(null)
-  const [tab, setTab] = useState<'edit' | 'practice'>('edit')
+  const [tab, setTab] = useState<'library' | 'edit' | 'practice'>('edit')
   const [draft, setDraft] = useState('')
   const [link, setLink] = useState('')
   const [fetching, setFetching] = useState(false)
@@ -68,9 +68,17 @@ export default function App() {
     player.onState = () => rerender((n) => n + 1)
     listSongs().then(async (list) => {
       setSongs(list)
-      await open(list[0] ? (await loadSong(list[0].id)) ?? newSong() : newSong())
+      const recent = list[0] && (await loadSong(list[0].id))
+      // Empty library starts in the editor; otherwise go straight to practising the latest song.
+      setTab(recent ? 'practice' : 'edit')
+      await open(recent || newSong())
     })
   }, [])
+
+  async function openSaved(id: string) {
+    setTab('practice')
+    await open((await loadSong(id))!)
+  }
 
   async function open(s: Song) {
     player.clear()
@@ -226,39 +234,51 @@ export default function App() {
   return (
     <div className="app">
       <header className="no-print">
-        <h1>歌词学习</h1>
-        <select value={song.id} onChange={async (e) => open((await loadSong(e.target.value))!)}>
-          {!songs.some((s) => s.id === song.id) && <option value={song.id}>{song.title}（未保存）</option>}
-          {songs.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.title}
-              {s.artist && ` - ${s.artist}`}
-            </option>
-          ))}
-        </select>
-        <button onClick={() => open(newSong())}>新建</button>
-        <button
-          onClick={async () => {
-            if (!confirm(`删除「${song.title}」？`)) return
-            await deleteSong(song.id)
-            const list = await listSongs()
-            setSongs(list)
-            open(list[0] ? (await loadSong(list[0].id))! : newSong())
-          }}
-        >
-          删除
+        <button className="logo" onClick={() => setTab('library')}>
+          うたまな<small>Utamana</small>
         </button>
+        {tab !== 'library' && <span className="current">{song.title}</span>}
         <nav>
-          <button className={tab === 'edit' ? 'on' : ''} onClick={() => (setTab('edit'), setDraft(toLrc(song.lines)))}>
-            编辑
+          <button className={tab === 'library' ? 'on' : ''} onClick={() => setTab('library')}>
+            曲库
           </button>
           <button className={tab === 'practice' ? 'on' : ''} onClick={() => setTab('practice')}>
             练习
+          </button>
+          <button className={tab === 'edit' ? 'on' : ''} onClick={() => (setTab('edit'), setDraft(toLrc(song.lines)))}>
+            编辑
           </button>
         </nav>
       </header>
 
       {dictError && <p className="error no-print">词典加载失败：{dictError}</p>}
+
+      {tab === 'library' && (
+        <main className="library no-print">
+          <h2>
+            我的曲库 <span className="hint">{songs.length} 首</span>
+          </h2>
+          <div className="grid">
+            <button className="card new" onClick={() => (open(newSong()), setTab('edit'))}>
+              ＋ 新建歌曲
+            </button>
+            {songs.map((s) => (
+              <button key={s.id} className={`card ${s.id === song.id ? 'current-card' : ''}`} onClick={() => openSaved(s.id)}>
+                <span className="card-title">{s.title}</span>
+                <span className="card-artist">{s.artist || '未填歌手'}</span>
+                {s.first && <span className="card-first">{s.first}</span>}
+                <span className="badges">
+                  {!!s.lines && <i>{s.lines} 句</i>}
+                  {s.timed && <i>已打点</i>}
+                  {!!s.tracks && <i>{s.tracks} 条音轨</i>}
+                  {s.trans && <i>有翻译</i>}
+                </span>
+                <span className="card-date">{new Date(s.updated).toLocaleDateString()}</span>
+              </button>
+            ))}
+          </div>
+        </main>
+      )}
 
       {tab === 'edit' && (
         <main className="edit no-print">
@@ -340,6 +360,20 @@ export default function App() {
               spellCheck={false}
               onChange={(e) => update({ trans: e.target.value.split('\n') })}
             />
+          </section>
+
+          <section className="danger">
+            <button
+              onClick={async () => {
+                if (!confirm(`删除「${song.title}」？歌词和音频都会删掉，不能恢复。`)) return
+                await deleteSong(song.id)
+                setSongs(await listSongs())
+                open(newSong())
+                setTab('library')
+              }}
+            >
+              删除这首歌
+            </button>
           </section>
         </main>
       )}
@@ -442,7 +476,7 @@ export default function App() {
         </div>
       )}
 
-      <article className={`sheet ${tab === 'edit' ? 'print-only' : ''}`}>
+      <article className={`sheet ${tab === 'edit' ? 'print-only' : ''} ${tab === 'library' ? 'hidden' : ''}`}>
         <h1 className="sheet-title">
           {song.title}
           {song.artist && <small> {song.artist}</small>}

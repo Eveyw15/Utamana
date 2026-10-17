@@ -1,75 +1,128 @@
 :root {
-  --bg: #fafaf7;
-  --fg: #222;
-  --muted: #777;
-  --line: #ddd;
-  --accent: #d6336c;
-  --hl: #fff0f5;
-  font-family: system-ui, 'Hiragino Sans', 'Yu Gothic UI', 'Microsoft YaHei', sans-serif;
+  --bg: #f7f4ee;
+  --paper: #fffdf9;
+  --fg: #2b2a33;
+  --muted: #8a8691;
+  --line: #e6e0d6;
+  --accent: #e0607e;
+  --accent-soft: #fbe7ec;
+  --indigo: #4b5aa8;
+  --hl: #fdf0f3;
+  --shadow: 0 1px 2px rgba(60, 40, 30, .05), 0 6px 20px rgba(60, 40, 30, .06);
+  --sans: 'Zen Maru Gothic', 'Hiragino Maru Gothic ProN', 'Yu Gothic UI', 'Microsoft YaHei', system-ui, sans-serif;
+  --serif: 'Noto Serif JP', 'Hiragino Mincho ProN', 'Yu Mincho', 'SimSun', serif;
+  font-family: var(--sans);
   color: var(--fg);
   background: var(--bg);
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1b1b1d;
-    --fg: #eee;
-    --muted: #999;
-    --line: #333;
-    --hl: #3a2230;
+    --bg: #17161c;
+    --paper: #201f27;
+    --fg: #ecebf1;
+    --muted: #9a97a6;
+    --line: #34323d;
+    --accent: #f07c96;
+    --accent-soft: #3a2531;
+    --indigo: #8f9ce0;
+    --hl: #2d2230;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 20px rgba(0, 0, 0, .25);
   }
 }
 * { box-sizing: border-box; }
-body { margin: 0; }
-.app { max-width: 900px; margin: 0 auto; padding: 0 16px 40vh; }
-header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 2; }
-header h1 { font-size: 18px; margin: 0 8px 0 0; }
-nav { margin-left: auto; display: flex; gap: 4px; }
-button, .button, select, input:not([type]) { font: inherit; padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+body { margin: 0; background: var(--bg); }
+.app { max-width: 960px; margin: 0 auto; padding: 0 16px 40vh; }
+.hidden { display: none; }
+
+/* Header */
+header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 14px 0; position: sticky; top: 0; background: var(--bg); z-index: 3; }
+.logo { border: 0; padding: 0; background: none; font-size: 22px; font-weight: 700; color: var(--accent); letter-spacing: .04em; display: flex; align-items: baseline; gap: 6px; }
+.logo small { font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: .1em; }
+.current { color: var(--muted); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw; }
+.current::before { content: '／'; margin-right: 8px; opacity: .5; }
+nav { margin-left: auto; display: flex; gap: 2px; background: var(--paper); padding: 3px; border-radius: 999px; box-shadow: var(--shadow); }
+nav button { border: 0; border-radius: 999px; padding: 5px 16px; }
+
+/* Controls */
+button, .button, select, input:not([type]) { font: inherit; padding: 5px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: inherit; cursor: pointer; transition: background .15s, border-color .15s; }
+button:hover:not(:disabled), .button:hover { border-color: var(--accent); }
+input:not([type]) { cursor: text; }
+input:not([type]):focus, textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 button:disabled { opacity: .4; cursor: default; }
-.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 8px 0; }
-.row label { display: flex; align-items: center; gap: 6px; }
+input[type='range'] { accent-color: var(--accent); }
+input[type='checkbox'] { accent-color: var(--accent); }
+.row { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; margin: 10px 0; }
+.row label { display: flex; align-items: center; gap: 6px; font-size: 14px; }
 .grow { flex: 1; min-width: 120px; }
-.time { font-variant-numeric: tabular-nums; color: var(--muted); }
-.play { min-width: 64px; }
-.track { width: 3em; font-weight: 600; }
-.hint { color: var(--muted); font-size: 13px; margin: 4px 0; }
+.time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+.play { min-width: 72px; background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; border-radius: 999px; }
+.track { width: 3em; font-weight: 700; }
+.hint { color: var(--muted); font-size: 13px; margin: 4px 0; font-weight: normal; }
 .error { color: var(--accent); }
-.loading { padding: 40px; text-align: center; }
-h2 { font-size: 15px; margin: 20px 0 4px; }
-textarea { width: 100%; min-height: 50vh; font: 15px/1.6 ui-monospace, Consolas, monospace; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; }
-.controls { position: sticky; top: 53px; background: var(--bg); z-index: 1; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+.loading { padding: 40px; text-align: center; color: var(--muted); }
+h2 { font-size: 16px; margin: 0 0 6px; }
+textarea { width: 100%; min-height: 50vh; font: 15px/1.7 ui-monospace, Consolas, monospace; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: inherit; resize: vertical; }
+textarea.short { min-height: 25vh; }
 
-.sheet-title { font-size: 22px; margin: 20px 0 12px; }
-.sheet-title small { font-size: 14px; color: var(--muted); font-weight: normal; }
-.sheet ol { list-style: none; padding: 0; margin: 0; }
-.sheet li { padding: 6px 10px; border-radius: 6px; border-left: 3px solid transparent; cursor: pointer; }
-.sheet li.gap { height: 12px; padding: 0; }
+.controls { position: sticky; top: 64px; z-index: 2; background: var(--paper); border-radius: 16px; box-shadow: var(--shadow); padding: 6px 18px; margin-bottom: 8px; }
+
+/* Library */
+.library h2 { margin: 12px 0 14px; display: flex; gap: 8px; align-items: baseline; font-size: 20px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+.card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; padding: 16px; min-height: 150px; border: 1px solid transparent; border-radius: 16px; background: var(--paper); box-shadow: var(--shadow); transition: transform .15s, border-color .15s; }
+.card:hover { transform: translateY(-2px); }
+.card.new { align-items: center; justify-content: center; border: 2px dashed var(--line); box-shadow: none; background: transparent; color: var(--muted); font-size: 15px; }
+.card.current-card { border-color: var(--accent-soft); }
+.card-title { font-size: 17px; font-weight: 700; }
+.card-artist { font-size: 13px; color: var(--muted); }
+.card-first { font-family: var(--serif); font-size: 14px; margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; padding-top: 8px; }
+.badges i { font-style: normal; font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.card-date { font-size: 11px; color: var(--muted); }
+
+/* Editor */
+.edit section { background: var(--paper); border-radius: 16px; box-shadow: var(--shadow); padding: 16px 18px; margin: 14px 0; }
+.edit section.danger { background: none; box-shadow: none; padding: 0; text-align: right; }
+.edit section.danger button { color: var(--accent); border-color: transparent; background: none; }
+.edit > .row:first-child label { font-weight: 700; }
+
+/* Lyric sheet: the block is centred, each line stays left-aligned. */
+.sheet { background: var(--paper); border-radius: 20px; box-shadow: var(--shadow); padding: 28px 24px 40px; }
+.sheet-title { font-size: 26px; margin: 0 0 20px; text-align: center; font-family: var(--serif); }
+.sheet-title small { display: block; font-size: 14px; color: var(--muted); font-weight: normal; font-family: var(--sans); margin-top: 4px; }
+.sheet ol { list-style: none; padding: 0; margin: 0 auto; width: fit-content; max-width: 100%; }
+.sheet li { position: relative; padding: 6px 40px 6px 14px; border-radius: 10px; border-left: 3px solid transparent; cursor: pointer; transition: background .2s; }
+.sheet li:hover { background: var(--bg); }
+.sheet li.gap { height: 18px; padding: 0; }
 .sheet li.active { background: var(--hl); border-left-color: var(--accent); }
 .sheet li.next { border-left-color: var(--muted); border-left-style: dashed; }
-.jp { font-size: 20px; line-height: 2.1; white-space: pre-wrap; }
-rt { font-size: 11px; color: var(--muted); }
-.romaji { font-size: 13px; color: var(--muted); }
+.jp { font-family: var(--serif); font-size: 21px; line-height: 2.2; white-space: pre-wrap; }
+rt { font-family: var(--sans); font-size: 11px; color: var(--accent); }
+.romaji { font-size: 13px; color: var(--muted); letter-spacing: .02em; }
+.trans { font-size: 14px; color: var(--indigo); margin-top: 2px; }
+ruby.editable { cursor: pointer; border-radius: 3px; }
+ruby.editable:hover { background: var(--accent-soft); }
+.edit-line { position: absolute; right: 6px; top: 8px; opacity: 0; padding: 0 8px; border: 0; background: none; color: var(--muted); }
+.sheet li:hover .edit-line { opacity: 1; }
 .print-only { display: none; }
 
+@media (max-width: 600px) {
+  .controls { top: 104px; padding: 4px 12px; }
+  .sheet { padding: 20px 8px; }
+  .jp { font-size: 18px; }
+}
+
 @media print {
-  :root { --bg: #fff; --fg: #000; --muted: #444; }
+  :root { --bg: #fff; --paper: #fff; --fg: #000; --muted: #444; --accent: #444; --indigo: #333; }
   .no-print { display: none !important; }
   .print-only { display: block; }
   .app { padding: 0; max-width: none; }
-  .sheet li { padding: 1px 0; break-inside: avoid; }
+  .sheet { box-shadow: none; padding: 0; }
+  .sheet li { padding: 1px 0; break-inside: avoid; border: 0; }
   .sheet li.active { background: none; }
   .jp { font-size: 15px; line-height: 1.9; }
   .romaji { font-size: 10px; }
+  .trans { font-size: 11px; }
   rt { font-size: 8px; }
 }
-
-ruby.editable { cursor: pointer; border-radius: 3px; }
-ruby.editable:hover { background: var(--hl); outline: 1px dashed var(--accent); }
-.sheet li { position: relative; }
-.edit-line { position: absolute; right: 6px; top: 6px; opacity: 0; padding: 0 6px; }
-.sheet li:hover .edit-line { opacity: .7; }
-@media print { ruby.editable { outline: none; } }
-.trans { font-size: 14px; color: var(--fg); opacity: .8; }
-textarea.short { min-height: 25vh; }
-@media print { .trans { font-size: 11px; } }
