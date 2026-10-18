@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { KANJI, annotateLine, setReading, type Annotated, type Seg } from './furigana'
 import { alignTranslation, fmtTime, parseLyrics, toLrc } from './lrc'
 import { Player, TRACK_LABEL, type TrackKey } from './player'
+import { CLICK_LABEL, beatGrid, detectTempo, type ClickSound, type Section } from './beat'
 import { FONTS, applyFonts, loadFonts, type FontSettings } from './fonts'
 import { deleteRemote, pushSong, supabase, syncAll } from './cloud'
 import { deleteSong, listSongs, loadSong, saveSong, type Song, type SongMeta } from './db'
@@ -207,6 +208,9 @@ export default function App() {
   }, [player.playing])
 
   useEffect(() => void (player.tempo = tempo), [tempo])
+  useEffect(() => {
+    player.source.clicks = beatGrid(song?.beat ?? [], player.duration, player.sampleRate)
+  }, [JSON.stringify(song?.beat), player.duration])
   useEffect(() => void (player.semitones = semi), [semi])
 
   const active = useMemo(() => {
@@ -246,6 +250,12 @@ export default function App() {
   if (!song) return <p className="loading">加载中…</p>
 
   const hasAudio = TRACKS.some((k) => song.audio[k])
+  const baseBpm = song.beat?.[0]?.bpm
+  const metro = player.source.metronome
+  const setMetro = (patch: Partial<typeof metro>) => {
+    Object.assign(metro, patch)
+    rerender((n) => n + 1)
+  }
   const timed = song.lines.some((l) => l.time != null)
   const nextSync = syncAt == null ? -1 : song.lines.findIndex((l, i) => i >= syncAt && l.text)
 
@@ -286,6 +296,27 @@ export default function App() {
     } finally {
       setTranslating(false)
     }
+  }
+
+  function detectBeat() {
+    const t = player.source.tracks
+    const buf = t.instrumental ?? t.original ?? t.vocals
+    if (!buf || (song!.beat?.length && !confirm('重新测速会覆盖现有的节拍设置，继续？'))) return
+    const { bpm, offset } = detectTempo(buf)
+    update({ beat: [{ time: +offset.toFixed(3), bpm, beats: 4 }] })
+    player.source.metronome.on = true
+  }
+
+  function setSection(i: number, patch: Partial<Section> | null) {
+    const beat = song!.beat ?? []
+    update({ beat: patch ? beat.map((s, j) => (j === i ? { ...s, ...patch } : s)) : beat.filter((_, j) => j !== i) })
+  }
+
+  function addSection() {
+    const now = +player.currentTime.toFixed(3)
+    const prev = [...(song!.beat ?? [])].reverse().find((s) => s.time <= now) ?? song!.beat?.[0]
+    const beat = [...(song!.beat ?? []), { time: now, bpm: prev?.bpm ?? 120, beats: prev?.beats ?? 4 }]
+    update({ beat: beat.sort((a, b) => a.time - b.time) })
   }
 
   function setLine(i: number, text: string) {
@@ -531,16 +562,73 @@ export default function App() {
                 <span className="time">{fmtTime(player.duration)}</span>
               </div>
               <div className="row">
-                <label>
-                  速度 {Math.round(tempo * 100)}%
-                  <input type="range" min={0.5} max={1.5} step={0.05} value={tempo} onChange={(e) => setTempo(+e.target.value)} />
-                </label>
+                {baseBpm ? (
+                  <label title={`原速 ${baseBpm} BPM`}>
+                    速度 ♩={Math.round(baseBpm * tempo)}
+                    <input
+                      type="range"
+                      min={Math.round(baseBpm * 0.5)}
+                      max={Math.round(baseBpm * 1.5)}
+                      step={1}
+                      value={Math.round(baseBpm * tempo)}
+                      onChange={(e) => setTempo(+e.target.value / baseBpm)}
+                    />
+                  </label>
+                ) : (
+                  <label>
+                    速度 {Math.round(tempo * 100)}%
+                    <input type="range" min={0.5} max={1.5} step={0.05} value={tempo} onChange={(e) => setTempo(+e.target.value)} />
+                  </label>
+                )}
                 <label>
                   Key {semi > 0 ? `+${semi}` : semi}
                   <input type="range" min={-6} max={6} step={1} value={semi} onChange={(e) => setSemi(+e.target.value)} />
                 </label>
                 <button onClick={() => (setTempo(1), setSemi(0))}>复原</button>
               </div>
+              <div className="row">
+                <label>
+                  <input type="checkbox" checked={metro.on} onChange={(e) => setMetro({ on: e.target.checked })} />
+                  节拍器
+                </label>
+                <select value={metro.sound} onChange={(e) => setMetro({ sound: e.target.value as ClickSound })}>
+                  {Object.entries(CLICK_LABEL).map(([k, v]) => (
+                    <option key={k} value={k}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+                <label>
+                  音量
+                  <input type="range" min={0} max={1.5} step={0.05} value={metro.volume} onChange={(e) => setMetro({ volume: +e.target.value })} />
+                </label>
+                <button onClick={detectBeat}>自动测速</button>
+                {metro.on && <button onClick={addSection}>＋ 从当前位置变拍</button>}
+              </div>
+              {metro.on && !!song.beat?.length && (
+                <div className="sections">
+                  {song.beat.map((s, i) => (
+                    <div className="row" key={i}>
+                      <button className="time" title="设为当前播放位置" onClick={() => setSection(i, { time: +player.currentTime.toFixed(3) })}>
+                        {fmtTime(s.time)}
+                      </button>
+                      <label>
+                        BPM
+                        <input type="number" min={30} max={300} step={0.1} value={s.bpm} onChange={(e) => setSection(i, { bpm: +e.target.value || s.bpm })} />
+                      </label>
+                      <button onClick={() => setSection(i, { bpm: s.bpm / 2 })}>÷2</button>
+                      <button onClick={() => setSection(i, { bpm: s.bpm * 2 })}>×2</button>
+                      <label>
+                        每小节
+                        <input type="number" min={1} max={16} value={s.beats} onChange={(e) => setSection(i, { beats: Math.max(1, +e.target.value) })} />
+                        拍
+                      </label>
+                      {i > 0 && <button onClick={() => setSection(i, null)}>删除</button>}
+                    </div>
+                  ))}
+                  <p className="hint">点时间可设为当前播放位置：在某小节第一拍处点它，重音就对齐了。变拍子的地方用「从当前位置变拍」加一段。</p>
+                </div>
+              )}
               <div className="row">
                 {TRACKS.filter((k) => song.audio[k]).map((k) => (
                   <label key={k}>

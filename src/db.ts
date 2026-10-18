@@ -1,4 +1,5 @@
 import { del, get, set } from 'idb-keyval'
+import type { Section } from './beat'
 import type { Line } from './lrc'
 import type { TrackKey } from './player'
 
@@ -8,6 +9,7 @@ export type Song = {
   artist: string
   lines: Line[]
   trans?: string[] // one per non-empty lyric line
+  beat?: Section[] // metronome sections, see beat.ts
   audio: Partial<Record<TrackKey, Blob>>
   audioRev?: Partial<Record<TrackKey, number>> // bumped when a track is replaced, so sync knows what to upload
   updated: number

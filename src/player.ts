@@ -1,4 +1,5 @@
 import { SimpleFilter, SoundTouch, getWebAudioNode } from 'soundtouchjs'
+import { CLICK_SECONDS, clickSample, type Click, type ClickSound } from './beat'
 
 export type TrackKey = 'original' | 'vocals' | 'instrumental'
 export const TRACK_LABEL: Record<TrackKey, string> = { original: '原曲', vocals: '人声', instrumental: '伴奏' }
@@ -8,6 +9,10 @@ class MixSource {
   tracks: Partial<Record<TrackKey, AudioBuffer>> = {}
   gains: Record<TrackKey, number> = { original: 1, vocals: 1, instrumental: 1 }
   karaoke = false // naive vocal removal on the original: L - R cancels centre-panned voice
+  // Metronome clicks are mixed in here, before SoundTouch, so they follow speed changes in perfect sync.
+  clicks: Click[] = []
+  metronome = { on: false, volume: 0.6, sound: 'wood' as ClickSound }
+  sampleRate = 44100
 
   get length() {
     return Math.max(0, ...Object.values(this.tracks).map((b) => b!.length))
@@ -35,13 +40,34 @@ class MixSource {
         }
       }
     }
+    if (this.metronome.on) this.mixClicks(target, n, position)
     return n
+  }
+
+  mixClicks(target: Float32Array, n: number, position: number) {
+    const len = Math.round(CLICK_SECONDS * this.sampleRate)
+    // First click that can still sound inside this block.
+    let lo = 0, hi = this.clicks.length
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (this.clicks[mid].pos + len <= position) lo = mid + 1
+      else hi = mid
+    }
+    const { volume, sound } = this.metronome
+    for (let c = lo; c < this.clicks.length && this.clicks[c].pos < position + n; c++) {
+      const { pos, accent } = this.clicks[c]
+      for (let i = Math.max(pos, position); i < Math.min(pos + len, position + n); i++) {
+        const s = volume * clickSample(sound, accent, (i - pos) / this.sampleRate)
+        target[(i - position) * 2] += s
+        target[(i - position) * 2 + 1] += s
+      }
+    }
   }
 }
 
 export class Player {
   ctx = new AudioContext()
-  source = new MixSource()
+  source = Object.assign(new MixSource(), { sampleRate: this.ctx.sampleRate })
   st = new SoundTouch()
   filter = new SimpleFilter(this.source, this.st, () => this.pause())
   node = getWebAudioNode(this.ctx, this.filter)

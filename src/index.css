@@ -136,3 +136,7 @@ ruby.editable:hover { background: var(--accent-soft); }
 .account input[type='email'] { font: inherit; padding: 5px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: inherit; }
 .sync { font-size: 12px; color: var(--muted); }
 .sync.error { color: var(--accent); }
+.sections { border-top: 1px dashed var(--line); padding-top: 4px; }
+.sections .row { margin: 4px 0; }
+.sections input[type='number'] { width: 5em; font: inherit; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: inherit; }
+.sections button.time { min-width: 72px; }
