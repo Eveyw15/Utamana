@@ -9,6 +9,7 @@ export type Song = {
   lines: Line[]
   trans?: string[] // one per non-empty lyric line
   audio: Partial<Record<TrackKey, Blob>>
+  audioRev?: Partial<Record<TrackKey, number>> // bumped when a track is replaced, so sync knows what to upload
   updated: number
 }
 
@@ -55,8 +56,9 @@ export async function listSongs() {
   return list.sort((a, b) => b.updated - a.updated)
 }
 
-export async function saveSong(song: Song) {
-  song.updated = Date.now()
+// touch = false keeps the timestamp, used when saving a copy pulled from the cloud.
+export async function saveSong(song: Song, touch = true) {
+  if (touch) song.updated = Date.now()
   await set(`song:${song.id}`, song)
   await set(INDEX, [...(await listSongs()).filter((s) => s.id !== song.id), summary(song)])
 }

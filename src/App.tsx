@@ -3,6 +3,7 @@ import { KANJI, annotateLine, setReading, type Annotated, type Seg } from './fur
 import { alignTranslation, fmtTime, parseLyrics, toLrc } from './lrc'
 import { Player, TRACK_LABEL, type TrackKey } from './player'
 import { FONTS, applyFonts, loadFonts, type FontSettings } from './fonts'
+import { deleteRemote, pushSong, supabase, syncAll } from './cloud'
 import { deleteSong, listSongs, loadSong, saveSong, type Song, type SongMeta } from './db'
 
 const player = new Player()
@@ -84,6 +85,59 @@ export default function App() {
   const activeRef = useRef<HTMLLIElement>(null)
   const [fonts, setFonts] = useState<FontSettings>(loadFonts)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [user, setUser] = useState<string | null>(null) // signed-in email
+  const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'error'>('idle')
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginSent, setLoginSent] = useState(false)
+  const songRef = useRef(song)
+  songRef.current = song
+  const pending = useRef(new Map<string, Song>())
+  const pushTimer = useRef(0)
+
+  useEffect(() => {
+    if (!supabase) return
+    supabase.auth.getSession().then(({ data }) => setUser(data.session?.user.email ?? null))
+    const { data } = supabase.auth.onAuthStateChange((_, s) => setUser(s?.user.email ?? null))
+    return () => data.subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    if (user) runSync()
+  }, [user])
+
+  async function runSync() {
+    setSyncState('syncing')
+    try {
+      await syncAll()
+      const list = await listSongs()
+      setSongs(list)
+      // Fresh device: the unsaved blank song is showing, jump to the synced library.
+      if (list[0] && !list.some((s) => s.id === songRef.current?.id)) await openSaved(list[0].id)
+      setSyncState('idle')
+    } catch (e) {
+      console.error(e)
+      setSyncState('error')
+    }
+  }
+
+  // Debounced so typing in the editor does not upload on every keystroke.
+  function queuePush(s: Song) {
+    if (!user) return
+    pending.current.set(s.id, s)
+    clearTimeout(pushTimer.current)
+    pushTimer.current = window.setTimeout(async () => {
+      const batch = [...pending.current.values()]
+      pending.current.clear()
+      setSyncState('syncing')
+      try {
+        for (const x of batch) await pushSong(x)
+        setSyncState('idle')
+      } catch (e) {
+        console.error(e)
+        setSyncState('error')
+      }
+    }, 2000)
+  }
 
   useEffect(() => applyFonts(fonts), [fonts])
 
@@ -125,6 +179,7 @@ export default function App() {
     setSong(next)
     await saveSong(next)
     setSongs(await listSongs())
+    queuePush(next)
   }
 
   // Re-annotate whenever the lyric text changes.
@@ -198,7 +253,7 @@ export default function App() {
     const audio = { ...song!.audio }
     if (file) audio[k] = file
     else delete audio[k]
-    await update({ audio })
+    await update({ audio, audioRev: { ...song!.audioRev, [k]: Date.now() } })
     await player.load(k, file)
     applyDefaultGains({ ...song!, audio })
   }
@@ -272,11 +327,42 @@ export default function App() {
             编辑
           </button>
         </nav>
+        {user && <span className={`sync ${syncState}`}>{{ idle: '已同步', syncing: '同步中…', error: '同步失败' }[syncState]}</span>}
         <button className={`gear ${settingsOpen ? 'on' : ''}`} title="设置" onClick={() => setSettingsOpen(!settingsOpen)}>
           设置
         </button>
         {settingsOpen && (
           <div className="settings">
+            <div className="account">
+              <b>账号同步</b>
+              {!supabase ? (
+                <span className="hint">还没配置云同步，按 README 填好 .env.local 后重启。</span>
+              ) : user ? (
+                <>
+                  <span>{user}</span>
+                  <button disabled={syncState === 'syncing'} onClick={runSync}>
+                    立即同步
+                  </button>
+                  <button onClick={() => supabase!.auth.signOut()}>退出</button>
+                </>
+              ) : loginSent ? (
+                <span className="hint">登录链接已发到 {loginEmail}，在这台电脑上点开邮件里的链接即可。</span>
+              ) : (
+                <>
+                  <input type="email" placeholder="邮箱" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} />
+                  <button
+                    disabled={!loginEmail.includes('@')}
+                    onClick={async () => {
+                      const { error } = await supabase!.auth.signInWithOtp({ email: loginEmail.trim(), options: { emailRedirectTo: location.origin } })
+                      if (error) alert(`发送失败：${error.message}`)
+                      else setLoginSent(true)
+                    }}
+                  >
+                    发送登录链接
+                  </button>
+                </>
+              )}
+            </div>
             <FontPicker label="界面字体" value={fonts.ui} onChange={(ui) => setFonts({ ...fonts, ui })} />
             <FontPicker label="歌词字体" value={fonts.lyric} onChange={(lyric) => setFonts({ ...fonts, lyric })} />
             <p className="jp preview">
@@ -409,6 +495,7 @@ export default function App() {
               onClick={async () => {
                 if (!confirm(`删除「${song.title}」？歌词和音频都会删掉，不能恢复。`)) return
                 await deleteSong(song.id)
+                deleteRemote(song.id).catch(() => setSyncState('error'))
                 setSongs(await listSongs())
                 open(newSong())
                 setTab('library')

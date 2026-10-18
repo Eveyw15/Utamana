@@ -11,6 +11,7 @@
     "postinstall": "node scripts/copy-dict.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
     "idb-keyval": "^6.3.0",
     "kuromoji": "^0.1.2",
     "react": "^19.2.8",

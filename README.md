@@ -21,6 +21,18 @@ npm run dev
 - **打点**：练习页点「开始打点」，每句开始唱时按空格，退格回上一句。打好后可导出 `.lrc`。
 - **打印**：练习页「打印 / 导出 PDF」，在打印对话框选「另存为 PDF」。假名、罗马音开关会影响打印内容。
 
+## 账号和云同步（可选）
+
+不配置也能用，数据只存在本机浏览器。想多设备同步：
+
+1. 在 https://supabase.com 注册并新建一个项目（免费版即可）。
+2. 打开项目的 SQL Editor，粘贴 `supabase/schema.sql` 的内容并运行。
+3. Authentication -> URL Configuration，把 Site URL 设成 `http://localhost:5173`。
+4. 复制 `.env.example` 为 `.env.local`，填入 Project Settings -> API 里的 Project URL 和 anon public key。
+5. 重启 `npm run dev`，点右上角「设置」用邮箱登录。
+
+同步内容：歌词、读音、时间轴、翻译和音频。同一首歌两边都改过时，以最后保存的为准。免费版存储 1 GB，音频大约够一两百首。
+
 ## 测试
 
 ```bash
