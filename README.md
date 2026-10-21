@@ -8,10 +8,10 @@ The app ships no lyrics and never fetches them from the web. It only works with 
 
 ## Features
 
-- **Automatic furigana**: kuromoji tokenizes each line; readings sit above the kanji and romaji below (particles は/へ/を read as wa/e/o). Fix a reading by clicking the kanji, or write `漢字{よみ}` in the lyrics.
+- **Automatic furigana**: kuromoji tokenizes each line; readings sit above the kanji and romaji below (particles は/へ/を read as wa/e/o). Fix a reading by double-clicking the kanji, or write `漢字{よみ}` in the lyrics.
 - **Multi-track playback**: original, vocals and instrumental tracks, each with its own volume. Turn vocals down to 0 for karaoke; with only the original there is a simple vocal remover.
 - **Speed and key**: real-time SoundTouch processing, speed without pitch change, key ±6 semitones.
-- **Lyric sync**: tap Space at the start of each line while the song plays, or import `.lrc`. The current line is highlighted and clicking a line seeks to it.
+- **Lyric sync**: tap Space at the start of each line while the song plays, or import `.lrc`. The current line is highlighted; click a line to start playback from it, and Space plays or pauses.
 - **Metronome**: tap tempo (button or T key) sets the BPM and bar 1, speed is shown in BPM, and sections with their own BPM and beats per bar handle meter changes; new sections snap to the previous section's beats. Three click sounds.
 - **Translations**: import a translation (timed LRC files are matched by timestamp) or translate to Chinese with Google Translate.
 - **Online audio**: import the audio of a Bilibili or YouTube video by URL (needs yt-dlp).

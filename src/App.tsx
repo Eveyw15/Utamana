@@ -34,7 +34,7 @@ function LyricLine({ a, trans, show, onRuby }: LineProps) {
       <div className="jp">
         {a.segs.map((s, i) =>
           KANJI.test(s.text) ? (
-            <ruby key={i} className="editable" title="点击修改读音" onClick={click(s)}>
+            <ruby key={i} className="editable" title="双击修改读音" onDoubleClick={click(s)}>
               {s.text}
               {show.kana && <rt>{s.ruby}</rt>}
             </ruby>
@@ -248,13 +248,19 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [syncAt, song])
 
-  // T = tap tempo on the practice page (not while typing or tap-syncing lyrics).
+  // Practice page shortcuts: T = tap tempo, Space = play/pause (Space belongs to lyric sync while syncing).
   useEffect(() => {
     if (tab !== 'practice' || syncAt != null) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== 'KeyT' || e.repeat || (e.target as Element).closest?.('input, textarea, select')) return
+      const target = e.target as HTMLElement
+      if (e.repeat || target.closest?.('textarea, select, input:not([type=range]):not([type=checkbox])')) return
+      if (e.code === 'KeyT') tap()
+      else if (e.code === 'Space') {
+        target.blur?.() // otherwise a focused button would also be clicked on keyup
+        if (player.playing) player.pause()
+        else player.play()
+      } else return
       e.preventDefault()
-      tap()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
