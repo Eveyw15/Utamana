@@ -94,6 +94,7 @@ export default function App() {
   songRef.current = song
   const pending = useRef(new Map<string, Song>())
   const taps = useRef<{ at: number; wall: number }[]>([])
+  const [metroOpen, setMetroOpen] = useState(false)
   const pushTimer = useRef(0)
 
   useEffect(() => {
@@ -626,9 +627,12 @@ export default function App() {
                   点按测速 (T){taps.current.length ? ` · ${taps.current.length}` : ''}
                 </button>
                 {baseBpm && <span className="hint">{song.beat!.length > 1 ? `${song.beat!.length} 段，` : ''}原速 ♩={baseBpm}</span>}
+                <button className={`link ${metroOpen ? 'on' : ''}`} onClick={() => setMetroOpen(!metroOpen)}>
+                  节拍器设置 {metroOpen ? '▴' : '▾'}
+                </button>
               </div>
-              <details className="metro-details">
-                <summary>节拍器设置</summary>
+              {metroOpen && (
+              <div className="metro-details">
                 <div className="row">
                 <select value={metro.sound} onChange={(e) => setMetro({ sound: e.target.value as ClickSound })}>
                   {Object.entries(CLICK_LABEL).map(([k, v]) => (
@@ -681,7 +685,8 @@ export default function App() {
                 </div>
               )}
                 <p className="hint">播放时跟着拍子点「点按测速」或按 T，点 4 下以上就设好 BPM，第一下当作小节第一拍。变拍子的地方点「从当前位置变拍」，会自动对齐到前一段最近的拍子；差一拍就用 ‹ › 挪。</p>
-              </details>
+              </div>
+              )}
               <div className="row">
                 {TRACKS.filter((k) => song.audio[k]).map((k) => (
                   <label key={k}>
