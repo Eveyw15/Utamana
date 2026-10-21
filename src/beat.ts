@@ -3,50 +3,31 @@
 export type Section = { time: number; bpm: number; beats: number }
 export type Click = { pos: number; accent: boolean } // pos in source samples
 
-type Audio = { sampleRate: number; length: number; numberOfChannels: number; getChannelData(c: number): Float32Array }
-
-const HOP = 512
-
-// Onset strength: positive change of log energy per HOP-sized frame.
-function onsetEnvelope(buf: Audio, maxSeconds: number) {
-  const chans = Array.from({ length: buf.numberOfChannels }, (_, c) => buf.getChannelData(c))
-  const frames = Math.floor(Math.min(buf.length, maxSeconds * buf.sampleRate) / HOP)
-  const env = new Float32Array(frames)
-  let prev = 0
-  for (let f = 0; f < frames; f++) {
-    let e = 0
-    for (const ch of chans) for (let i = f * HOP; i < (f + 1) * HOP; i++) e += ch[i] * ch[i]
-    const le = Math.log(1e-9 + e)
-    env[f] = f ? Math.max(0, le - prev) : 0
-    prev = le
-  }
-  return env
+// Tap tempo: fit taps (song time, so playback speed doesn't matter) to an even beat grid.
+// Returns the BPM and the fitted time of the first tap, which is steadier than the raw first tap.
+export function tapFit(taps: number[]) {
+  const n = taps.length
+  if (n < 2) return null
+  const gap = (taps[n - 1] - taps[0]) / (n - 1)
+  if (gap <= 0) return null
+  const first = taps.reduce((sum, t, k) => sum + t - k * gap, 0) / n
+  return { bpm: Math.round(600 / gap) / 10, first }
 }
 
-// Global tempo by autocorrelating the onset envelope, then the beat phase that best lines up with onsets.
-// shortcut: assumes a mostly steady tempo; songs with tempo changes need sections added by hand.
-export function detectTempo(buf: Audio): { bpm: number; offset: number } {
-  const env = onsetEnvelope(buf, 90)
-  const fps = buf.sampleRate / HOP
-  let best = 0, bestLag = 0
-  for (let lag = Math.floor((fps * 60) / 200); lag <= Math.ceil((fps * 60) / 60); lag++) {
-    let s = 0
-    for (let i = lag; i < env.length; i++) s += env[i] * env[i - lag]
-    // Mild preference for ~120 BPM to avoid half/double-tempo picks.
-    const bpm = (fps * 60) / lag
-    s *= Math.exp(-0.5 * Math.log2(bpm / 120) ** 2)
-    if (s > best) [best, bestLag] = [s, lag]
-  }
-  // Refine the period over many beats: pick the fractional period whose comb collects the most onset energy.
-  let bestPeriod = bestLag, bestScore = -1, bestPhase = 0
-  for (let p = bestLag - 1; p <= bestLag + 1; p += 0.02) {
-    for (let phase = 0; phase < p; phase += 1) {
-      let s = 0
-      for (let t = phase; t < env.length; t += p) s += env[Math.round(t)] ?? 0
-      if (s > bestScore) [bestScore, bestPeriod, bestPhase] = [s, p, phase]
-    }
-  }
-  return { bpm: Math.round(((fps * 60) / bestPeriod) * 10) / 10, offset: (bestPhase * HOP) / buf.sampleRate }
+// First section: the first tap is a downbeat. Start the grid a whole number of bars earlier,
+// as close to 0 as possible, so the metronome also clicks before the first tap.
+export function anchorFirst(firstTap: number, bpm: number, beats: number) {
+  const bar = (60 / bpm) * beats
+  return +(firstTap - Math.floor(firstTap / bar) * bar).toFixed(3)
+}
+
+// Snap a time onto the beat grid of the section in effect before it, so a new section's
+// first beat lines up with the previous section's beats.
+export function snapToBeat(sections: Section[], t: number, skip?: number) {
+  const prev = sections.filter((s, i) => i !== skip && s.time <= t).at(-1)
+  if (!prev) return +t.toFixed(3)
+  const beat = 60 / prev.bpm
+  return +(prev.time + Math.round((t - prev.time) / beat) * beat).toFixed(3)
 }
 
 export function beatGrid(sections: Section[], duration: number, sampleRate: number): Click[] {

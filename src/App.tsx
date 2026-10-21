@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { KANJI, annotateLine, setReading, type Annotated, type Seg } from './furigana'
 import { alignTranslation, fmtTime, parseLyrics, toLrc } from './lrc'
 import { Player, TRACK_LABEL, type TrackKey } from './player'
-import { CLICK_LABEL, beatGrid, detectTempo, type ClickSound, type Section } from './beat'
+import { CLICK_LABEL, anchorFirst, beatGrid, snapToBeat, tapFit, type ClickSound, type Section } from './beat'
 import { FONTS, applyFonts, loadFonts, type FontSettings } from './fonts'
 import { deleteRemote, pushSong, supabase, syncAll } from './cloud'
 import { deleteSong, listSongs, loadSong, saveSong, type Song, type SongMeta } from './db'
@@ -93,6 +93,7 @@ export default function App() {
   const songRef = useRef(song)
   songRef.current = song
   const pending = useRef(new Map<string, Song>())
+  const taps = useRef<{ at: number; wall: number }[]>([])
   const pushTimer = useRef(0)
 
   useEffect(() => {
@@ -200,7 +201,7 @@ export default function App() {
     if (!player.playing) return
     let raf = 0
     const tick = () => {
-      setTime(player.currentTime)
+      setTime(player.heardTime)
       raf = requestAnimationFrame(tick)
     }
     tick()
@@ -232,7 +233,7 @@ export default function App() {
         let i = syncAt
         while (i < song.lines.length && !song.lines[i].text) i++
         if (i >= song.lines.length) return setSyncAt(null)
-        const lines = song.lines.map((l, j) => (j === i ? { ...l, time: +player.currentTime.toFixed(2) } : l))
+        const lines = song.lines.map((l, j) => (j === i ? { ...l, time: +player.heardTime.toFixed(2) } : l))
         update({ lines })
         setSyncAt(i + 1)
       } else if (e.code === 'Backspace') {
@@ -246,6 +247,18 @@ export default function App() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [syncAt, song])
+
+  // T = tap tempo on the practice page (not while typing or tap-syncing lyrics).
+  useEffect(() => {
+    if (tab !== 'practice' || syncAt != null) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== 'KeyT' || e.repeat || (e.target as Element).closest?.('input, textarea, select')) return
+      e.preventDefault()
+      tap()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   if (!song) return <p className="loading">加载中…</p>
 
@@ -298,12 +311,22 @@ export default function App() {
     }
   }
 
-  function detectBeat() {
-    const t = player.source.tracks
-    const buf = t.instrumental ?? t.original ?? t.vocals
-    if (!buf || (song!.beat?.length && !confirm('重新测速会覆盖现有的节拍设置，继续？'))) return
-    const { bpm, offset } = detectTempo(buf)
-    update({ beat: [{ time: +offset.toFixed(3), bpm, beats: 4 }] })
+  // Tap along with the beat (button or T). A pause over 2 s starts a new run; from the 4th tap on,
+  // the run sets the BPM of the section it started in. In the first section the first tap is bar 1.
+  function tap() {
+    if (!player.playing) return
+    const wall = performance.now()
+    if (wall - (taps.current.at(-1)?.wall ?? 0) > 2000) taps.current = []
+    taps.current.push({ at: player.heardTime, wall })
+    rerender((n) => n + 1)
+    const fit = tapFit(taps.current.map((t) => t.at))
+    if (!fit || taps.current.length < 4) return
+    const beat = song!.beat ?? []
+    const i = beat.filter((s) => s.time <= fit.first + 0.05).length - 1
+    if (i <= 0) {
+      const beats = beat[0]?.beats ?? 4
+      update({ beat: [{ time: anchorFirst(fit.first, fit.bpm, beats), bpm: fit.bpm, beats }, ...beat.slice(1)] })
+    } else setSection(i, { bpm: fit.bpm })
     player.source.metronome.on = true
   }
 
@@ -312,10 +335,12 @@ export default function App() {
     update({ beat: patch ? beat.map((s, j) => (j === i ? { ...s, ...patch } : s)) : beat.filter((_, j) => j !== i) })
   }
 
+  // New sections start on the nearest beat of the section before, so the grids join seamlessly.
   function addSection() {
-    const now = +player.currentTime.toFixed(3)
-    const prev = [...(song!.beat ?? [])].reverse().find((s) => s.time <= now) ?? song!.beat?.[0]
-    const beat = [...(song!.beat ?? []), { time: now, bpm: prev?.bpm ?? 120, beats: prev?.beats ?? 4 }]
+    const beat0 = song!.beat ?? []
+    const now = snapToBeat(beat0, player.heardTime)
+    const prev = beat0.filter((s) => s.time <= now).at(-1) ?? beat0[0]
+    const beat = [...beat0, { time: now, bpm: prev?.bpm ?? 120, beats: prev?.beats ?? 4 }]
     update({ beat: beat.sort((a, b) => a.time - b.time) })
   }
 
@@ -542,7 +567,7 @@ export default function App() {
         <div className="controls no-print">
           {hasAudio ? (
             <>
-              <div className="row">
+              <div className="row transport">
                 <button className="play" onClick={() => (player.playing ? player.pause() : player.play())}>
                   {player.playing ? '暂停' : '播放'}
                 </button>
@@ -602,16 +627,32 @@ export default function App() {
                   音量
                   <input type="range" min={0} max={1.5} step={0.05} value={metro.volume} onChange={(e) => setMetro({ volume: +e.target.value })} />
                 </label>
-                <button onClick={detectBeat}>自动测速</button>
+                <button className={taps.current.length ? 'on' : ''} disabled={!player.playing} title="播放时跟着拍子点，或按 T 键" onClick={tap}>
+                  点按测速 (T){taps.current.length ? ` · ${taps.current.length}` : ''}
+                </button>
                 {metro.on && <button onClick={addSection}>＋ 从当前位置变拍</button>}
               </div>
               {metro.on && !!song.beat?.length && (
                 <div className="sections">
                   {song.beat.map((s, i) => (
                     <div className="row" key={i}>
-                      <button className="time" title="设为当前播放位置" onClick={() => setSection(i, { time: +player.currentTime.toFixed(3) })}>
+                      {i > 0 && (
+                        <button title="提前一拍" onClick={() => setSection(i, { time: +(s.time - 60 / song.beat![i - 1].bpm).toFixed(3) })}>
+                          ‹
+                        </button>
+                      )}
+                      <button
+                        className="time"
+                        title={i ? '设为当前播放位置（自动对齐到前一段的拍子）' : '设为当前播放位置'}
+                        onClick={() => setSection(i, { time: i ? snapToBeat(song.beat!, player.heardTime, i) : +player.heardTime.toFixed(3) })}
+                      >
                         {fmtTime(s.time)}
                       </button>
+                      {i > 0 && (
+                        <button title="推后一拍" onClick={() => setSection(i, { time: +(s.time + 60 / song.beat![i - 1].bpm).toFixed(3) })}>
+                          ›
+                        </button>
+                      )}
                       <label>
                         BPM
                         <input type="number" min={30} max={300} step={0.1} value={s.bpm} onChange={(e) => setSection(i, { bpm: +e.target.value || s.bpm })} />
@@ -626,7 +667,7 @@ export default function App() {
                       {i > 0 && <button onClick={() => setSection(i, null)}>删除</button>}
                     </div>
                   ))}
-                  <p className="hint">点时间可设为当前播放位置：在某小节第一拍处点它，重音就对齐了。变拍子的地方用「从当前位置变拍」加一段。</p>
+                  <p className="hint">播放时跟着拍子点「点按测速」或按 T，点 4 下以上就设好 BPM，第一下当作小节第一拍。变拍子的地方点「从当前位置变拍」，会自动对齐到前一段最近的拍子；差一拍就用 ‹ › 挪。</p>
                 </div>
               )}
               <div className="row">

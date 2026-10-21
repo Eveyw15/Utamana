@@ -80,9 +80,16 @@ export class Player {
   get duration() {
     return this.source.length / this.sampleRate
   }
-  // shortcut: this is the position fed into SoundTouch, about 0.1-0.2 s ahead of what you hear.
+  // Position fed into SoundTouch; runs ahead of what you hear while playing.
   get currentTime() {
     return this.filter.sourcePosition / this.sampleRate
+  }
+  // shortcut: latency estimated as the ScriptProcessor buffer, SoundTouch's internal buffer and the
+  // device output latency; measure it if taps still land early or late.
+  get heardTime() {
+    if (!this.playing) return this.currentTime
+    const seconds = (4096 + 4096) / this.sampleRate + (this.ctx.outputLatency || 0) + this.ctx.baseLatency
+    return Math.max(0, this.currentTime - seconds * this.st.tempo)
   }
 
   async load(key: TrackKey, blob: Blob | undefined) {

@@ -65,7 +65,7 @@ h2 { font-size: 16px; margin: 0 0 6px; }
 textarea { width: 100%; min-height: 50vh; font: 15px/1.7 ui-monospace, Consolas, monospace; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: inherit; resize: vertical; }
 textarea.short { min-height: 25vh; }
 
-.controls { position: sticky; top: 64px; z-index: 2; background: var(--paper); border-radius: 16px; box-shadow: var(--shadow); padding: 6px 18px; margin-bottom: 8px; }
+.controls { background: var(--paper); border-radius: 16px; box-shadow: var(--shadow); padding: 6px 18px; margin-bottom: 8px; }
 
 /* Library */
 .library h2 { margin: 12px 0 14px; display: flex; gap: 8px; align-items: baseline; font-size: 20px; }
@@ -108,7 +108,7 @@ ruby.editable:hover { background: var(--accent-soft); }
 .print-only { display: none; }
 
 @media (max-width: 600px) {
-  .controls { top: 104px; padding: 4px 12px; }
+  .controls { padding: 4px 12px; }
   .sheet { padding: 20px 8px; }
   .jp { font-size: 18px; }
 }
@@ -140,3 +140,6 @@ ruby.editable:hover { background: var(--accent-soft); }
 .sections .row { margin: 4px 0; }
 .sections input[type='number'] { width: 5em; font: inherit; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: inherit; }
 .sections button.time { min-width: 72px; }
+
+/* Transport bar stays pinned to the bottom so play/seek is always reachable. */
+.transport { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; margin: 0; padding: 10px max(16px, calc((100vw - 960px) / 2 + 16px)); background: var(--paper); box-shadow: 0 -4px 20px rgba(60, 40, 30, .08); }

@@ -12,7 +12,7 @@ The app ships no lyrics and never fetches them from the web. It only works with 
 - **Multi-track playback**: original, vocals and instrumental tracks, each with its own volume. Turn vocals down to 0 for karaoke; with only the original there is a simple vocal remover.
 - **Speed and key**: real-time SoundTouch processing, speed without pitch change, key ±6 semitones.
 - **Lyric sync**: tap Space at the start of each line while the song plays, or import `.lrc`. The current line is highlighted and clicking a line seeks to it.
-- **Metronome**: automatic BPM and beat detection, speed shown in BPM, per-section BPM and beats per bar for songs with meter changes, three click sounds.
+- **Metronome**: tap tempo (button or T key) sets the BPM and bar 1, speed is shown in BPM, and sections with their own BPM and beats per bar handle meter changes; new sections snap to the previous section's beats. Three click sounds.
 - **Translations**: import a translation (timed LRC files are matched by timestamp) or translate to Chinese with Google Translate.
 - **Online audio**: import the audio of a Bilibili or YouTube video by URL (needs yt-dlp).
 - **Print / PDF**: a laid-out lyric sheet; choose whether to include furigana, romaji and translation.
@@ -37,7 +37,7 @@ Without cloud sync, songs live only in this browser's IndexedDB, and **clearing 
 1. **New song**: click "＋ 新建歌曲" in the library, fill in title and artist, then paste lyrics (plain text or LRC) or import a `.txt` / `.lrc` file.
 2. **Audio**: add any of original, vocals and instrumental. For best results split the song first with [MISST](https://misst.app/) or [UVR](https://github.com/Anjok07/ultimatevocalremovergui) and upload the two stems.
 3. **Sync**: on the practice page click "开始打点", press Space as each line starts, Backspace to step back.
-4. **Metronome**: click "自动测速". Use ÷2 / ×2 if the BPM is off by an octave. If the accent is off, click the section's time on a downbeat; where the meter changes, click "从当前位置变拍" to add a section.
+4. **Metronome**: while the song plays, tap "点按测速" or press T along with the beat, starting on a downbeat; four or more taps set the BPM. Where the meter changes, click "从当前位置变拍": the new section snaps to the nearest beat of the previous one, and ‹ › move it by one beat.
 5. **Print**: click "打印 / 导出 PDF" and choose "Save as PDF" in the print dialog.
 
 ### Import from Bilibili / YouTube (optional)
