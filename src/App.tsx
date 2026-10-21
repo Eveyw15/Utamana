@@ -571,7 +571,7 @@ export default function App() {
       )}
 
       {tab === 'practice' && (
-        <div className="controls no-print">
+        <div className={`controls no-print ${metroOpen ? 'pinned' : ''}`}>
           {hasAudio ? (
             <>
               <div className="row transport">

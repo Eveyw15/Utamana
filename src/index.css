@@ -146,3 +146,6 @@ ruby.editable:hover { background: var(--accent-soft); }
 .metro-details { margin: 0 0 6px; }
 button.link { border: 0; background: none; padding: 4px 2px; font-size: 13px; color: var(--muted); }
 button.link.on { background: none; color: var(--accent); }
+/* While editing metronome sections, keep the panel on screen as the lyrics auto-scroll. */
+.controls.pinned { position: sticky; top: 64px; z-index: 2; max-height: calc(100vh - 150px); overflow-y: auto; }
+@media (max-width: 600px) { .controls.pinned { top: 104px; } }
