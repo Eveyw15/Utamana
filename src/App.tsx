@@ -616,6 +616,14 @@ export default function App() {
                   <input type="checkbox" checked={metro.on} onChange={(e) => setMetro({ on: e.target.checked })} />
                   节拍器
                 </label>
+                <button className={taps.current.length ? 'on' : ''} disabled={!player.playing} title="播放时跟着拍子点，或按 T 键" onClick={tap}>
+                  点按测速 (T){taps.current.length ? ` · ${taps.current.length}` : ''}
+                </button>
+                {baseBpm && <span className="hint">{song.beat!.length > 1 ? `${song.beat!.length} 段，` : ''}原速 ♩={baseBpm}</span>}
+              </div>
+              <details className="metro-details">
+                <summary>节拍器设置</summary>
+                <div className="row">
                 <select value={metro.sound} onChange={(e) => setMetro({ sound: e.target.value as ClickSound })}>
                   {Object.entries(CLICK_LABEL).map(([k, v]) => (
                     <option key={k} value={k}>
@@ -627,12 +635,9 @@ export default function App() {
                   音量
                   <input type="range" min={0} max={1.5} step={0.05} value={metro.volume} onChange={(e) => setMetro({ volume: +e.target.value })} />
                 </label>
-                <button className={taps.current.length ? 'on' : ''} disabled={!player.playing} title="播放时跟着拍子点，或按 T 键" onClick={tap}>
-                  点按测速 (T){taps.current.length ? ` · ${taps.current.length}` : ''}
-                </button>
-                {metro.on && <button onClick={addSection}>＋ 从当前位置变拍</button>}
+                <button onClick={addSection}>＋ 从当前位置变拍</button>
               </div>
-              {metro.on && !!song.beat?.length && (
+              {!!song.beat?.length && (
                 <div className="sections">
                   {song.beat.map((s, i) => (
                     <div className="row" key={i}>
@@ -667,9 +672,10 @@ export default function App() {
                       {i > 0 && <button onClick={() => setSection(i, null)}>删除</button>}
                     </div>
                   ))}
-                  <p className="hint">播放时跟着拍子点「点按测速」或按 T，点 4 下以上就设好 BPM，第一下当作小节第一拍。变拍子的地方点「从当前位置变拍」，会自动对齐到前一段最近的拍子；差一拍就用 ‹ › 挪。</p>
                 </div>
               )}
+                <p className="hint">播放时跟着拍子点「点按测速」或按 T，点 4 下以上就设好 BPM，第一下当作小节第一拍。变拍子的地方点「从当前位置变拍」，会自动对齐到前一段最近的拍子；差一拍就用 ‹ › 挪。</p>
+              </details>
               <div className="row">
                 {TRACKS.filter((k) => song.audio[k]).map((k) => (
                   <label key={k}>

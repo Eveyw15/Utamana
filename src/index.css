@@ -143,3 +143,6 @@ ruby.editable:hover { background: var(--accent-soft); }
 
 /* Transport bar stays pinned to the bottom so play/seek is always reachable. */
 .transport { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; margin: 0; padding: 10px max(16px, calc((100vw - 960px) / 2 + 16px)); background: var(--paper); box-shadow: 0 -4px 20px rgba(60, 40, 30, .08); }
+.metro-details { margin: 0 0 6px; }
+.metro-details summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 2px 0; }
+.metro-details[open] summary { color: var(--accent); }
