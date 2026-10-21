@@ -1,7 +1,7 @@
 // Run: node --test src/beat.test.ts
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { anchorFirst, beatGrid, snapToBeat, tapFit } from './beat.ts'
+import { anchorFirst, beatGrid, parseSections, snapToBeat, tapFit } from './beat.ts'
 
 test('tapFit averages tap gaps and smooths the first beat', () => {
   assert.equal(tapFit([1]), null)
@@ -24,6 +24,17 @@ test('snapToBeat lands on the previous section beat grid', () => {
   const two = [...sections, { time: 5, bpm: 90, beats: 7 }]
   assert.equal(snapToBeat(two, 5.2, 1), 5)
   assert.equal(snapToBeat([], 3.21), 3.21)
+})
+
+test('beatGrid skips silent sections and parseSections validates files', () => {
+  const grid = beatGrid([{ time: 0, bpm: 120, beats: 2 }, { time: 1, bpm: 0, beats: 1 }, { time: 2, bpm: 60, beats: 1 }], 3, 10)
+  assert.deepEqual(grid.map((c) => c.pos), [0, 5, 20])
+  assert.deepEqual(parseSections('[{"time":2,"bpm":60,"beats":1,"x":1},{"time":0,"bpm":0,"beats":1}]'), [
+    { time: 0, bpm: 0, beats: 1 },
+    { time: 2, bpm: 60, beats: 1 },
+  ])
+  assert.throws(() => parseSections('[{"time":0,"bpm":120}]'))
+  assert.throws(() => parseSections('{}'))
 })
 
 test('beatGrid accents bar starts across meter changes', () => {

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { KANJI, annotateLine, setReading, type Annotated, type Seg } from './furigana'
 import { alignTranslation, fmtTime, parseLyrics, toLrc } from './lrc'
 import { Player, TRACK_LABEL, type TrackKey } from './player'
-import { CLICK_LABEL, anchorFirst, beatGrid, snapToBeat, tapFit, type ClickSound, type Section } from './beat'
+import { CLICK_LABEL, anchorFirst, beatGrid, parseSections, snapToBeat, tapFit, type ClickSound, type Section } from './beat'
 import { FONTS, applyFonts, loadFonts, type FontSettings } from './fonts'
 import { deleteRemote, pushSong, supabase, syncAll } from './cloud'
 import { deleteSong, listSongs, loadSong, saveSong, type Song, type SongMeta } from './db'
@@ -337,6 +337,18 @@ export default function App() {
     player.source.metronome.on = true
   }
 
+  async function importBeat(file?: File) {
+    if (!file) return
+    try {
+      const beat = parseSections(await file.text())
+      if (song!.beat?.length && !confirm('导入会覆盖现有的节拍设置，继续？')) return
+      update({ beat })
+      player.source.metronome.on = true
+    } catch (e) {
+      alert(`导入失败：${e instanceof Error ? e.message : e}`)
+    }
+  }
+
   function setSection(i: number, patch: Partial<Section> | null) {
     const beat = song!.beat ?? []
     update({ beat: patch ? beat.map((s, j) => (j === i ? { ...s, ...patch } : s)) : beat.filter((_, j) => j !== i) })
@@ -646,12 +658,19 @@ export default function App() {
                   <input type="range" min={0} max={1.5} step={0.05} value={metro.volume} onChange={(e) => setMetro({ volume: +e.target.value })} />
                 </label>
                 <button onClick={addSection}>＋ 从当前位置变拍</button>
+                <label className="button">
+                  导入节拍
+                  <input hidden type="file" accept=".json,application/json" onChange={(e) => importBeat(e.target.files?.[0])} />
+                </label>
+                <button disabled={!song.beat?.length} onClick={() => download(`${song.title}-节拍.json`, JSON.stringify(song.beat))}>
+                  导出节拍
+                </button>
               </div>
               {!!song.beat?.length && (
                 <div className="sections">
                   {song.beat.map((s, i) => (
                     <div className="row" key={i}>
-                      {i > 0 && (
+                      {i > 0 && song.beat![i - 1].bpm > 0 && (
                         <button title="提前一拍" onClick={() => setSection(i, { time: +(s.time - 60 / song.beat![i - 1].bpm).toFixed(3) })}>
                           ‹
                         </button>
@@ -663,14 +682,14 @@ export default function App() {
                       >
                         {fmtTime(s.time)}
                       </button>
-                      {i > 0 && (
+                      {i > 0 && song.beat![i - 1].bpm > 0 && (
                         <button title="推后一拍" onClick={() => setSection(i, { time: +(s.time + 60 / song.beat![i - 1].bpm).toFixed(3) })}>
                           ›
                         </button>
                       )}
                       <label>
                         BPM
-                        <input type="number" min={30} max={300} step={0.1} value={s.bpm} onChange={(e) => setSection(i, { bpm: +e.target.value || s.bpm })} />
+                        <input type="number" min={0} max={400} step={0.1} value={s.bpm} title="0 = 这一段不响" onChange={(e) => setSection(i, { bpm: e.target.value === '' ? s.bpm : Math.max(0, +e.target.value) })} />
                       </label>
                       <button onClick={() => setSection(i, { bpm: s.bpm / 2 })}>÷2</button>
                       <button onClick={() => setSection(i, { bpm: s.bpm * 2 })}>×2</button>

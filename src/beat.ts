@@ -25,15 +25,25 @@ export function anchorFirst(firstTap: number, bpm: number, beats: number) {
 // first beat lines up with the previous section's beats.
 export function snapToBeat(sections: Section[], t: number, skip?: number) {
   const prev = sections.filter((s, i) => i !== skip && s.time <= t).at(-1)
-  if (!prev) return +t.toFixed(3)
+  if (!prev || !(prev.bpm > 0)) return +t.toFixed(3)
   const beat = 60 / prev.bpm
   return +(prev.time + Math.round((t - prev.time) / beat) * beat).toFixed(3)
+}
+
+// Parse an exported metronome file; rejects anything that is not a list of sections.
+export function parseSections(text: string): Section[] {
+  const data: unknown = JSON.parse(text)
+  const ok = (s: Section) =>
+    Number.isFinite(s?.time) && s.time >= 0 && Number.isFinite(s.bpm) && s.bpm >= 0 && s.bpm <= 1000 && Number.isInteger(s.beats) && s.beats >= 1 && s.beats <= 32
+  if (!Array.isArray(data) || !data.length || !data.every(ok)) throw new Error('不是有效的节拍文件')
+  return (data as Section[]).map(({ time, bpm, beats }) => ({ time, bpm, beats })).sort((a, b) => a.time - b.time)
 }
 
 export function beatGrid(sections: Section[], duration: number, sampleRate: number): Click[] {
   const sorted = [...sections].sort((a, b) => a.time - b.time)
   const out: Click[] = []
   sorted.forEach((s, i) => {
+    if (!(s.bpm > 0)) return // BPM 0 = silent section, e.g. a free-tempo passage
     const end = sorted[i + 1]?.time ?? duration
     for (let n = 0, t = s.time; t < end; t = s.time + (++n * 60) / s.bpm)
       out.push({ pos: Math.round(t * sampleRate), accent: n % Math.max(1, s.beats) === 0 })
