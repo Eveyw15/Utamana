@@ -5,7 +5,9 @@
   "scripts": {
     "studio": "remotion studio src/index.ts",
     "music": "node make-music.mjs",
-    "render": "remotion render src/index.ts Promo out/utamana-promo.mp4"
+    "render": "remotion render src/index.ts Vlog out/utamana-vlog.mp4",
+    "record": "node record.mjs",
+    "render:promo": "remotion render src/index.ts Promo out/utamana-promo.mp4"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.537",
@@ -16,6 +18,7 @@
   },
   "devDependencies": {
     "@types/react": "^19.3.0",
+    "playwright-core": "^1.64.1",
     "typescript": "^7.0.2"
   }
 }
