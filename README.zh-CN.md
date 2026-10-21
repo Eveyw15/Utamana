@@ -77,3 +77,7 @@ npm run build               # 类型检查并打包
 | `vite.config.ts` | 本地接口：yt-dlp 下载、翻译转发 |
 
 技术栈：Vite、React、TypeScript、[kuromoji](https://github.com/takuyaa/kuromoji.js)、[wanakana](https://github.com/WaniKani/WanaKana)、[SoundTouchJS](https://github.com/cutterbl/SoundTouchJS)、[Supabase](https://supabase.com)。
+
+## 许可证
+
+[MIT](LICENSE)。第三方库沿用各自的许可证（例如 kuromoji 为 Apache-2.0，SoundTouchJS 为 LGPL-2.1）。

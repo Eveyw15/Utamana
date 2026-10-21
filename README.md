@@ -77,3 +77,7 @@ npm run build               # type-check and build
 | `vite.config.ts` | Local API: yt-dlp download, translation proxy |
 
 Built with Vite, React, TypeScript, [kuromoji](https://github.com/takuyaa/kuromoji.js), [wanakana](https://github.com/WaniKani/WanaKana), [SoundTouchJS](https://github.com/cutterbl/SoundTouchJS) and [Supabase](https://supabase.com).
+
+## License
+
+[MIT](LICENSE). Third-party libraries keep their own licenses (for example kuromoji: Apache-2.0, SoundTouchJS: LGPL-2.1).
