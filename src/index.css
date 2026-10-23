@@ -146,7 +146,14 @@ ruby.editable:hover { background: var(--accent-soft); }
 .app.practice .sheet ol { padding-bottom: 45vh; }
 .metro-details { margin: 0 0 6px; max-height: 35vh; overflow-y: auto; }
 .transport { margin: 8px 0 0; padding: 10px 18px; background: var(--paper); border-radius: 16px 16px 0 0; box-shadow: 0 -4px 20px rgba(60, 40, 30, .08); }
-.transport label input[type='range'] { width: 90px; }
+/* Volume and vocal: a compact chip; hovering (or focusing) it pops a vertical slider above. */
+.pop { position: relative; font-size: 13px; padding: 4px 10px; border-radius: 999px; cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pop:hover, .pop:focus-within { background: var(--bg); }
+.pop-bar { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); padding: 12px 6px; background: var(--paper); border-radius: 12px; box-shadow: var(--shadow); visibility: hidden; opacity: 0; transition: opacity .15s; }
+.pop-bar input { display: block; writing-mode: vertical-lr; direction: rtl; width: 24px; height: 120px; margin: 0; }
+/* invisible bridge so the pointer can travel from the chip up to the slider */
+.pop::before { content: ''; position: absolute; bottom: 100%; left: 0; right: 0; height: 12px; }
+.pop:hover .pop-bar, .pop:focus-within .pop-bar { visibility: visible; opacity: 1; }
 button.link { border: 0; background: none; padding: 4px 2px; font-size: 13px; color: var(--muted); }
 button.link.on { background: none; color: var(--accent); }
 /* Practice settings panel: docked to the right of the lyrics on wide screens, floating on narrow ones. */

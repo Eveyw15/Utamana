@@ -792,36 +792,40 @@ export default function App() {
             }}
           />
           <span className="time">{fmtTime(player.duration)}</span>
-          <label title="总音量">
-            音量
-            <input
-              type="range"
-              min={0}
-              max={1.5}
-              step={0.05}
-              value={player.volume}
-              onChange={(e) => {
-                player.volume = +e.target.value
-                rerender((n) => n + 1)
-              }}
-            />
-          </label>
-          {canVocal && (
-            <label title={onlyOriginal ? '只有原曲时按频段去掉居中的人声，效果有限；上传分离好的人声和伴奏效果最好' : '伴奏音量不变，只调人声'}>
-              {player.karaokeBusy ? '人声 处理中…' : `人声 ${Math.round(player.source.vocal * 100)}%`}
+          <div className="pop" tabIndex={0} title="总音量">
+            🔊 {Math.round(player.volume * 100)}%
+            <span className="pop-bar">
               <input
                 type="range"
                 min={0}
-                max={1}
+                max={1.5}
                 step={0.05}
-                value={player.source.vocal}
+                value={player.volume}
                 onChange={(e) => {
-                  player.source.vocal = +e.target.value
-                  if (onlyOriginal && player.source.vocal < 1) void player.buildKaraoke()
+                  player.volume = +e.target.value
                   rerender((n) => n + 1)
                 }}
               />
-            </label>
+            </span>
+          </div>
+          {canVocal && (
+            <div className="pop" tabIndex={0} title={onlyOriginal ? '只有原曲时按频段去掉居中的人声，效果有限；上传分离好的人声和伴奏效果最好' : '伴奏音量不变，只调人声'}>
+              🎤 {player.karaokeBusy ? '处理中…' : `${Math.round(player.source.vocal * 100)}%`}
+              <span className="pop-bar">
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={player.source.vocal}
+                  onChange={(e) => {
+                    player.source.vocal = +e.target.value
+                    if (onlyOriginal && player.source.vocal < 1) void player.buildKaraoke()
+                    rerender((n) => n + 1)
+                  }}
+                />
+              </span>
+            </div>
           )}
         </div>
       )}
