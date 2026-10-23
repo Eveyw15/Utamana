@@ -171,7 +171,7 @@ button.link.on { background: none; color: var(--accent); }
 .slider input[type=range] { grid-column: 1 / -1; width: 100%; margin: 0; }
 .slider output { cursor: text; }
 .slider input.num { width: 5em; padding: 1px 6px; text-align: right; font-weight: 600; color: var(--accent); }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .chips button { border-radius: 999px; padding: 4px 12px; font-size: 13px; }
 button.icon { border: 0; background: none; padding: 2px 6px; color: var(--muted); border-radius: 999px; }
 button.icon:hover { background: var(--bg); }
@@ -241,3 +241,4 @@ button.icon:hover { background: var(--bg); }
 .tag-filter .play { padding: 4px 14px; }
 .edit .save { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .queue { display: inline-flex; align-items: center; gap: 2px; padding-right: 8px; border-right: 1px solid var(--line); }
+.card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }

@@ -746,19 +746,21 @@ export default function App() {
                 <span className="card-cover">{s.cover ? <img src={s.cover} alt="" /> : <b lang="ja">{s.title.slice(0, 1)}</b>}</span>
                 <span className="card-title">{s.title}</span>
                 <span className="card-artist">{s.artist || '未填歌手'}</span>
-                <button
-                  className={`status ${s.status ?? ''}`}
-                  title="点击切换：想学 → 正在学 → 已学会"
-                  onClick={(e) => (e.stopPropagation(), patchSong(s.id, { status: nextStatus(s.status) }))}
-                >
-                  {s.status ? STATUS[s.status] : '＋ 学习状态'}
-                </button>
                 <span className="badges">
                   {s.tags?.map((t) => (
                     <i key={t}>{t}</i>
                   ))}
                 </span>
-                <span className="card-date">{new Date(s.updated).toLocaleDateString()}</span>
+                <span className="card-foot">
+                  <span className="card-date">{new Date(s.updated).toLocaleDateString()}</span>
+                  <button
+                    className={`status ${s.status ?? ''}`}
+                    title="点击切换：想学 → 正在学 → 已学会"
+                    onClick={(e) => (e.stopPropagation(), patchSong(s.id, { status: nextStatus(s.status) }))}
+                  >
+                    {s.status ? STATUS[s.status] : '＋ 学习状态'}
+                  </button>
+                </span>
               </div>
             ))}
           </div>
