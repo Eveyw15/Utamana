@@ -1,14 +1,15 @@
 import { SimpleFilter, SoundTouch, getWebAudioNode } from 'soundtouchjs'
-import { CLICK_SECONDS, clickSample, type Click, type ClickSound } from './beat'
+import { CLICK_SECONDS, clickSample, type Click, type ClickSound } from './beat.ts'
 
 export type TrackKey = 'original' | 'vocals' | 'instrumental'
 export const TRACK_LABEL: Record<TrackKey, string> = { original: '原曲', vocals: '人声', instrumental: '伴奏' }
 
 // Mixes the loaded tracks on the fly so every track stays sample-locked through SoundTouch.
-class MixSource {
+export class MixSource {
   tracks: Partial<Record<TrackKey, AudioBuffer>> = {}
-  gains: Record<TrackKey, number> = { original: 1, vocals: 1, instrumental: 1 }
-  karaoke = false // naive vocal removal on the original: L - R cancels centre-panned voice
+  // Vocal level 0..1, like Apple Music Sing: the backing stays at full volume whatever the tracks are.
+  vocal = 1
+  karaoke?: AudioBuffer // original with the centre vocal band removed, built on demand (see buildKaraoke)
   // Metronome clicks are mixed in here, before SoundTouch, so they follow speed changes in perfect sync.
   clicks: Click[] = []
   metronome = { on: false, volume: 0.6, sound: 'wood' as ClickSound }
@@ -18,26 +19,28 @@ class MixSource {
     return Math.max(0, ...Object.values(this.tracks).map((b) => b!.length))
   }
 
+  // Which buffers to mix and how loud, so that only the voice follows the vocal level.
+  // original = backing + voice, so v * original + (1 - v) * backing = backing + v * voice.
+  layers(): [AudioBuffer | undefined, number][] {
+    const { original, vocals, instrumental } = this.tracks
+    const v = this.vocal
+    if (vocals && instrumental) return [[vocals, v], [instrumental, 1]]
+    if (original && instrumental) return [[original, v], [instrumental, 1 - v]]
+    if (original) return this.karaoke ? [[original, v], [this.karaoke, 1 - v]] : [[original, 1]]
+    return [[vocals, v], [instrumental, 1]]
+  }
+
   extract(target: Float32Array, numFrames: number, position: number) {
     const n = Math.max(0, Math.min(numFrames, this.length - position))
     target.fill(0, 0, n * 2)
-    for (const [key, buf] of Object.entries(this.tracks) as [TrackKey, AudioBuffer][]) {
-      const g = this.gains[key]
-      if (!g) continue
+    for (const [buf, g] of this.layers()) {
+      if (!buf || !g) continue
       const l = buf.getChannelData(0)
       const r = buf.numberOfChannels > 1 ? buf.getChannelData(1) : l
       const end = Math.min(n, buf.length - position)
-      const removeVoice = key === 'original' && this.karaoke && buf.numberOfChannels > 1
       for (let i = 0; i < end; i++) {
-        const a = l[i + position], b = r[i + position]
-        if (removeVoice) {
-          const s = (a - b) * g
-          target[i * 2] += s
-          target[i * 2 + 1] += s
-        } else {
-          target[i * 2] += a * g
-          target[i * 2 + 1] += b * g
-        }
+        target[i * 2] += l[i + position] * g
+        target[i * 2 + 1] += r[i + position] * g
       }
     }
     if (this.metronome.on) this.mixClicks(target, n, position)
@@ -71,7 +74,9 @@ export class Player {
   st = new SoundTouch()
   filter = new SimpleFilter(this.source, this.st, () => this.pause())
   node = getWebAudioNode(this.ctx, this.filter)
+  master = this.ctx.createGain()
   playing = false
+  karaokeBusy = false
   onState: () => void = () => {}
 
   get sampleRate() {
@@ -95,6 +100,37 @@ export class Player {
   async load(key: TrackKey, blob: Blob | undefined) {
     if (blob) this.source.tracks[key] = await this.ctx.decodeAudioData(await blob.arrayBuffer())
     else delete this.source.tracks[key]
+    if (key === 'original') this.source.karaoke = undefined
+    this.onState()
+  }
+
+  // Original-only songs: subtract the centre (L+R)/2 only between 150 Hz and 7 kHz, where the voice is.
+  // Bass, kick and cymbals stay, and so does everything panned to the sides.
+  // shortcut: also removes centre-panned instruments in that band; real separation needs stems (UVR / MISST).
+  async buildKaraoke() {
+    const buf = this.source.tracks.original
+    if (!buf || buf.numberOfChannels < 2 || this.source.karaoke || this.karaokeBusy) return
+    this.karaokeBusy = true
+    this.onState()
+    const off = new OfflineAudioContext(2, buf.length, buf.sampleRate)
+    const src = new AudioBufferSourceNode(off, { buffer: buf })
+    const split = off.createChannelSplitter(2)
+    const mid = new GainNode(off, { gain: -0.5 })
+    src.connect(off.destination)
+    src.connect(split)
+    split.connect(mid, 0)
+    split.connect(mid, 1)
+    let band: AudioNode = mid
+    for (const [type, frequency] of [['highpass', 150], ['highpass', 150], ['lowpass', 7000], ['lowpass', 7000]] as const)
+      band = band.connect(new BiquadFilterNode(off, { type, frequency }))
+    const merge = off.createChannelMerger(2)
+    band.connect(merge, 0, 0)
+    band.connect(merge, 0, 1)
+    merge.connect(off.destination)
+    src.start()
+    const out = await off.startRendering()
+    if (this.source.tracks.original === buf) this.source.karaoke = out
+    this.karaokeBusy = false
     this.onState()
   }
 
@@ -108,7 +144,8 @@ export class Player {
     if (this.playing || !this.source.length) return
     if (this.currentTime >= this.duration) this.seek(0)
     void this.ctx.resume()
-    this.node.connect(this.ctx.destination)
+    this.master.connect(this.ctx.destination)
+    this.node.connect(this.master)
     this.playing = true
     this.onState()
   }
@@ -130,5 +167,11 @@ export class Player {
   }
   set semitones(v: number) {
     this.st.pitchSemitones = v
+  }
+  get volume() {
+    return this.master.gain.value
+  }
+  set volume(v: number) {
+    this.master.gain.value = v
   }
 }

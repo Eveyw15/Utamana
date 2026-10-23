@@ -1,6 +1,9 @@
 // Font choices for the settings panel. Web fonts come from the Google Fonts link in index.html.
 export const DEFAULT_STACK = "'PingFang SC', 'Hiragino Sans', 'Noto Sans JP', 'Microsoft YaHei', system-ui, sans-serif"
 
+// Chinese UI text uses Chinese glyphs first; a Japanese font draws some hanzi (e.g. 复) oddly next to Chinese ones.
+const UI_STACK = "'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Hiragino Sans', 'Noto Sans JP', system-ui, sans-serif"
+
 export const FONTS: { label: string; css: string }[] = [
   { label: '苹方风格（默认）', css: DEFAULT_STACK },
   { label: '圆体 M PLUS Rounded', css: "'M PLUS Rounded 1c', sans-serif" },
@@ -27,7 +30,7 @@ export const toCss = (v: string) =>
   !v.trim() ? DEFAULT_STACK : FONTS.some((f) => f.css === v) ? v : `"${v.replace(/["\\;]/g, '')}", ${DEFAULT_STACK}`
 
 export function applyFonts(s: FontSettings) {
-  document.documentElement.style.setProperty('--ui-font', toCss(s.ui))
+  document.documentElement.style.setProperty('--ui-font', s.ui === DEFAULT_STACK ? UI_STACK : toCss(s.ui))
   document.documentElement.style.setProperty('--lyric-font', toCss(s.lyric))
   try {
     localStorage.setItem(KEY, JSON.stringify(s))

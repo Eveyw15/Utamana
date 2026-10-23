@@ -9,7 +9,7 @@
   --indigo: #4b5aa8;
   --hl: #fdf0f3;
   --shadow: 0 1px 2px rgba(60, 40, 30, .05), 0 6px 20px rgba(60, 40, 30, .06);
-  --ui-font: 'PingFang SC', 'Hiragino Sans', 'Noto Sans JP', 'Microsoft YaHei', system-ui, sans-serif;
+  --ui-font: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Hiragino Sans', 'Noto Sans JP', system-ui, sans-serif;
   --lyric-font: var(--ui-font);
   font-family: var(--ui-font);
   color: var(--fg);
@@ -129,11 +129,8 @@ ruby.editable:hover { background: var(--accent-soft); }
 
 /* Settings */
 .gear { border-radius: 999px; }
-.settings { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; background: var(--paper); border-radius: 16px; box-shadow: var(--shadow); padding: 12px 18px; }
-.settings label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; }
-.settings .preview { margin: 0; font-size: 20px; }
-.account { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
-.account input[type='email'] { font: inherit; padding: 5px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: inherit; }
+.edit .preview { margin: 8px 0 0; font-size: 20px; }
+.edit input[type='email'] { font: inherit; padding: 5px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: inherit; }
 .sync { font-size: 12px; color: var(--muted); }
 .sync.error { color: var(--accent); }
 .sections { border-top: 1px dashed var(--line); padding-top: 4px; }
@@ -141,11 +138,19 @@ ruby.editable:hover { background: var(--accent-soft); }
 .sections input[type='number'] { width: 5em; font: inherit; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: inherit; }
 .sections button.time { min-width: 72px; }
 
-/* Transport bar stays pinned to the bottom so play/seek is always reachable. */
-.transport { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; margin: 0; padding: 10px max(16px, calc((100vw - 960px) / 2 + 16px)); background: var(--paper); box-shadow: 0 -4px 20px rgba(60, 40, 30, .08); }
-.metro-details { margin: 0 0 6px; }
+/* Practice page, Apple Music style: header, controls and transport stay put; only the lyrics scroll,
+   and the sung line is kept centred. */
+.app.practice { height: 100vh; height: 100dvh; display: flex; flex-direction: column; padding-bottom: 0; }
+.app.practice > * { flex: none; }
+.app.practice .sheet { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.app.practice .sheet ol { padding-bottom: 45vh; }
+.metro-details { margin: 0 0 6px; max-height: 35vh; overflow-y: auto; }
+.transport { margin: 8px 0 0; padding: 10px 18px; background: var(--paper); border-radius: 16px 16px 0 0; box-shadow: 0 -4px 20px rgba(60, 40, 30, .08); }
+.transport label input[type='range'] { width: 90px; }
 button.link { border: 0; background: none; padding: 4px 2px; font-size: 13px; color: var(--muted); }
 button.link.on { background: none; color: var(--accent); }
-/* While editing metronome sections, keep the panel on screen as the lyrics auto-scroll. */
-.controls.pinned { position: sticky; top: 64px; z-index: 2; max-height: calc(100vh - 150px); overflow-y: auto; }
-@media (max-width: 600px) { .controls.pinned { top: 104px; } }
+@media print {
+  .app.practice { height: auto; display: block; }
+  .app.practice .sheet { overflow: visible; }
+  .app.practice .sheet ol { padding-bottom: 0; }
+}

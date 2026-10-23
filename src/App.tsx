@@ -31,7 +31,7 @@ function LyricLine({ a, trans, show, onRuby }: LineProps) {
   }
   return (
     <>
-      <div className="jp">
+      <div className="jp" lang="ja">
         {a.segs.map((s, i) =>
           KANJI.test(s.text) ? (
             <ruby key={i} className="editable" title="双击修改读音" onDoubleClick={click(s)}>
@@ -44,7 +44,7 @@ function LyricLine({ a, trans, show, onRuby }: LineProps) {
         )}
       </div>
       {show.romaji && a.romaji && <div className="romaji">{a.romaji}</div>}
-      {show.trans && trans && <div className="trans">{trans}</div>}
+      {show.trans && trans && <div className="trans" lang="zh-CN">{trans}</div>}
     </>
   )
 }
@@ -70,7 +70,7 @@ function FontPicker({ label, value, onChange }: { label: string; value: string; 
 export default function App() {
   const [songs, setSongs] = useState<SongMeta[]>([])
   const [song, setSong] = useState<Song | null>(null)
-  const [tab, setTab] = useState<'library' | 'edit' | 'practice'>('edit')
+  const [tab, setTab] = useState<'library' | 'edit' | 'practice' | 'settings'>('edit')
   const [draft, setDraft] = useState('')
   const [link, setLink] = useState('')
   const [fetching, setFetching] = useState(false)
@@ -84,8 +84,8 @@ export default function App() {
   const [semi, setSemi] = useState(0)
   const [syncAt, setSyncAt] = useState<number | null>(null)
   const activeRef = useRef<HTMLLIElement>(null)
+  const manualScroll = useRef(0) // when the user last scrolled the lyrics by hand
   const [fonts, setFonts] = useState<FontSettings>(loadFonts)
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const [user, setUser] = useState<string | null>(null) // signed-in email
   const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'error'>('idle')
   const [loginEmail, setLoginEmail] = useState('')
@@ -165,15 +165,8 @@ export default function App() {
     setSong(s)
     setDraft(toLrc(s.lines))
     setSyncAt(null)
+    player.source.vocal = 1
     for (const k of TRACKS) await player.load(k, s.audio[k])
-    applyDefaultGains(s)
-  }
-
-  function applyDefaultGains(s: Song) {
-    // With stems, start on the stems; with original + instrumental only, start on the original.
-    const stems = !!(s.audio.vocals && s.audio.instrumental)
-    player.source.gains = { original: stems ? 0 : 1, vocals: 1, instrumental: s.audio.original && !stems ? 0 : 1 }
-    rerender((n) => n + 1)
   }
 
   async function update(patch: Partial<Song>) {
@@ -221,8 +214,9 @@ export default function App() {
     return idx
   }, [song, time])
 
+  // Keep the sung line centred, Apple Music style, unless the user scrolled away in the last 4 s.
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    if (performance.now() - manualScroll.current > 4000) activeRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [active])
 
   // Tap-to-sync: Space stamps the current line, Backspace steps back.
@@ -270,6 +264,9 @@ export default function App() {
   if (!song) return <p className="loading">加载中…</p>
 
   const hasAudio = TRACKS.some((k) => song.audio[k])
+  const tracks = player.source.tracks
+  const onlyOriginal = !!tracks.original && !tracks.vocals && !tracks.instrumental
+  const canVocal = !!tracks.vocals || (!!tracks.original && (!!tracks.instrumental || tracks.original.numberOfChannels > 1))
   const baseBpm = song.beat?.[0]?.bpm
   const metro = player.source.metronome
   const setMetro = (patch: Partial<typeof metro>) => {
@@ -285,7 +282,6 @@ export default function App() {
     else delete audio[k]
     await update({ audio, audioRev: { ...song!.audioRev, [k]: Date.now() } })
     await player.load(k, file)
-    applyDefaultGains({ ...song!, audio })
   }
 
   async function importLink() {
@@ -385,7 +381,7 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div className={`app ${tab === 'practice' ? 'practice' : ''}`}>
       <header className="no-print">
         <button className="logo" onClick={() => setTab('library')}>
           うたまな<small>Utamana</small>
@@ -403,13 +399,18 @@ export default function App() {
           </button>
         </nav>
         {user && <span className={`sync ${syncState}`}>{{ idle: '已同步', syncing: '同步中…', error: '同步失败' }[syncState]}</span>}
-        <button className={`gear ${settingsOpen ? 'on' : ''}`} title="设置" onClick={() => setSettingsOpen(!settingsOpen)}>
+        <button className={`gear ${tab === 'settings' ? 'on' : ''}`} title="设置" onClick={() => setTab(tab === 'settings' ? 'practice' : 'settings')}>
           设置
         </button>
-        {settingsOpen && (
-          <div className="settings">
-            <div className="account">
-              <b>账号同步</b>
+      </header>
+
+      {dictError && <p className="error no-print">词典加载失败：{dictError}</p>}
+
+      {tab === 'settings' && (
+        <main className="edit no-print">
+          <section>
+            <h2>账号同步</h2>
+            <div className="row">
               {!supabase ? (
                 <span className="hint">还没配置云同步，按 README 填好 .env.local 后重启。</span>
               ) : user ? (
@@ -438,9 +439,14 @@ export default function App() {
                 </>
               )}
             </div>
-            <FontPicker label="界面字体" value={fonts.ui} onChange={(ui) => setFonts({ ...fonts, ui })} />
-            <FontPicker label="歌词字体" value={fonts.lyric} onChange={(lyric) => setFonts({ ...fonts, lyric })} />
-            <p className="jp preview">
+          </section>
+          <section>
+            <h2>字体</h2>
+            <div className="row">
+              <FontPicker label="界面字体" value={fonts.ui} onChange={(ui) => setFonts({ ...fonts, ui })} />
+              <FontPicker label="歌词字体" value={fonts.lyric} onChange={(lyric) => setFonts({ ...fonts, lyric })} />
+            </div>
+            <p className="jp preview" lang="ja">
               <ruby>
                 明日<rt>あした</rt>
               </ruby>
@@ -450,11 +456,9 @@ export default function App() {
               </ruby>
               を見上げて
             </p>
-          </div>
-        )}
-      </header>
-
-      {dictError && <p className="error no-print">词典加载失败：{dictError}</p>}
+          </section>
+        </main>
+      )}
 
       {tab === 'library' && (
         <main className="library no-print">
@@ -469,7 +473,7 @@ export default function App() {
               <button key={s.id} className={`card ${s.id === song.id ? 'current-card' : ''}`} onClick={() => openSaved(s.id)}>
                 <span className="card-title">{s.title}</span>
                 <span className="card-artist">{s.artist || '未填歌手'}</span>
-                {s.first && <span className="card-first">{s.first}</span>}
+                {s.first && <span className="card-first" lang="ja">{s.first}</span>}
                 <span className="badges">
                   {!!s.lines && <i>{s.lines} 句</i>}
                   {s.timed && <i>已打点</i>}
@@ -533,6 +537,7 @@ export default function App() {
               </button>
             </div>
             <textarea
+              lang="ja"
               value={draft}
               spellCheck={false}
               onChange={(e) => {
@@ -583,28 +588,9 @@ export default function App() {
       )}
 
       {tab === 'practice' && (
-        <div className={`controls no-print ${metroOpen ? 'pinned' : ''}`}>
-          {hasAudio ? (
+        <div className="controls no-print">
+          {hasAudio && (
             <>
-              <div className="row transport">
-                <button className="play" onClick={() => (player.playing ? player.pause() : player.play())}>
-                  {player.playing ? '暂停' : '播放'}
-                </button>
-                <span className="time">{fmtTime(time)}</span>
-                <input
-                  className="grow"
-                  type="range"
-                  min={0}
-                  max={player.duration}
-                  step={0.1}
-                  value={time}
-                  onChange={(e) => {
-                    player.seek(+e.target.value)
-                    setTime(+e.target.value)
-                  }}
-                />
-                <span className="time">{fmtTime(player.duration)}</span>
-              </div>
               <div className="row">
                 {baseBpm ? (
                   <label title={`原速 ${baseBpm} BPM`}>
@@ -706,40 +692,7 @@ export default function App() {
                 <p className="hint">播放时跟着拍子点「点按测速」或按 T，点 4 下以上就设好 BPM，第一下当作小节第一拍。变拍子的地方点「从当前位置变拍」，会自动对齐到前一段最近的拍子；差一拍就用 ‹ › 挪。</p>
               </div>
               )}
-              <div className="row">
-                {TRACKS.filter((k) => song.audio[k]).map((k) => (
-                  <label key={k}>
-                    {TRACK_LABEL[k]} {Math.round(player.source.gains[k] * 100)}%
-                    <input
-                      type="range"
-                      min={0}
-                      max={1.5}
-                      step={0.05}
-                      value={player.source.gains[k]}
-                      onChange={(e) => {
-                        player.source.gains[k] = +e.target.value
-                        rerender((n) => n + 1)
-                      }}
-                    />
-                  </label>
-                ))}
-                {song.audio.original && (
-                  <label title="把原曲左右声道相减，能去掉居中的人声，音质会变差">
-                    <input
-                      type="checkbox"
-                      checked={player.source.karaoke}
-                      onChange={(e) => {
-                        player.source.karaoke = e.target.checked
-                        rerender((n) => n + 1)
-                      }}
-                    />
-                    原曲简易消人声
-                  </label>
-                )}
-              </div>
             </>
-          ) : (
-            <p className="hint">还没上传音频，可以在「编辑」里上传。</p>
           )}
           <div className="row">
             <label>
@@ -766,12 +719,18 @@ export default function App() {
                 </>
               ))}
             <button onClick={() => window.print()}>打印 / 导出 PDF</button>
+            {!hasAudio && <span className="hint">还没上传音频，可以在「编辑」里上传。</span>}
           </div>
         </div>
       )}
 
-      <article className={`sheet ${tab === 'edit' ? 'print-only' : ''} ${tab === 'library' ? 'hidden' : ''}`}>
-        <h1 className="sheet-title">
+      <article
+        className={`sheet ${tab === 'edit' ? 'print-only' : ''} ${tab === 'library' || tab === 'settings' ? 'hidden' : ''}`}
+        onWheel={() => (manualScroll.current = performance.now())}
+        onTouchMove={() => (manualScroll.current = performance.now())}
+        onMouseDown={(e) => e.target === e.currentTarget && (manualScroll.current = performance.now())} // scrollbar drag
+      >
+        <h1 className="sheet-title" lang="ja">
           {song.title}
           {song.artist && <small> {song.artist}</small>}
         </h1>
@@ -782,7 +741,7 @@ export default function App() {
               key={i}
               ref={i === active ? activeRef : undefined}
               className={[!l.text && 'gap', i === active && 'active', i === nextSync && 'next'].filter(Boolean).join(' ')}
-              onClick={() => l.time != null && syncAt == null && (player.seek(l.time), setTime(l.time))}
+              onClick={() => l.time != null && syncAt == null && ((manualScroll.current = 0), player.seek(l.time), setTime(l.time))}
             >
               {l.text && <LyricLine a={annotated[i]} trans={song.trans?.[all.slice(0, i).filter((x) => x.text).length]} show={show} onRuby={(s) => editReading(i, s)} />}
               {l.text && (
@@ -794,6 +753,59 @@ export default function App() {
           ))}
         </ol>
       </article>
+
+      {tab === 'practice' && hasAudio && (
+        <div className="row transport no-print">
+          <button className="play" onClick={() => (player.playing ? player.pause() : player.play())}>
+            {player.playing ? '暂停' : '播放'}
+          </button>
+          <span className="time">{fmtTime(time)}</span>
+          <input
+            className="grow"
+            type="range"
+            min={0}
+            max={player.duration}
+            step={0.1}
+            value={time}
+            onChange={(e) => {
+              player.seek(+e.target.value)
+              setTime(+e.target.value)
+            }}
+          />
+          <span className="time">{fmtTime(player.duration)}</span>
+          <label title="总音量">
+            音量
+            <input
+              type="range"
+              min={0}
+              max={1.5}
+              step={0.05}
+              value={player.volume}
+              onChange={(e) => {
+                player.volume = +e.target.value
+                rerender((n) => n + 1)
+              }}
+            />
+          </label>
+          {canVocal && (
+            <label title={onlyOriginal ? '只有原曲时按频段去掉居中的人声，效果有限；上传分离好的人声和伴奏效果最好' : '伴奏音量不变，只调人声'}>
+              {player.karaokeBusy ? '人声 处理中…' : `人声 ${Math.round(player.source.vocal * 100)}%`}
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={player.source.vocal}
+                onChange={(e) => {
+                  player.source.vocal = +e.target.value
+                  if (onlyOriginal && player.source.vocal < 1) void player.buildKaraoke()
+                  rerender((n) => n + 1)
+                }}
+              />
+            </label>
+          )}
+        </div>
+      )}
     </div>
   )
 }
