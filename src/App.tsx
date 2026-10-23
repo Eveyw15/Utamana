@@ -89,6 +89,8 @@ export default function App() {
   const [aligning, setAligning] = useState(false)
   const [coverHits, setCoverHits] = useState<CoverHit[] | null>(null) // online search results
   const [coverBusy, setCoverBusy] = useState(false)
+  const [tagFilter, setTagFilter] = useState<string | null>(null) // library: only songs with this tag
+  const [tagDraft, setTagDraft] = useState('')
   const beforeAlign = useRef<Song['lines'] | null>(null) // lines before the last auto-align, for undo
   const [semi, setSemi] = useState(0)
   const [syncAt, setSyncAt] = useState<number | null>(null)
@@ -294,6 +296,7 @@ export default function App() {
   if (!song) return <p className="loading">加载中…</p>
 
   const hasAudio = TRACKS.some((k) => song.audio[k])
+  const allTags = [...new Set(songs.flatMap((s) => s.tags ?? []))].sort()
   const tracks = player.source.tracks
   const onlyOriginal = !!tracks.original && !tracks.vocals && !tracks.instrumental
   const canVocal = !!tracks.vocals || (!!tracks.original && (!!tracks.instrumental || tracks.original.numberOfChannels > 1))
@@ -343,6 +346,12 @@ export default function App() {
     } finally {
       setAligning(false)
     }
+  }
+
+  function addTag() {
+    const t = tagDraft.trim()
+    setTagDraft('')
+    if (t && !song!.tags?.includes(t)) update({ tags: [...(song!.tags ?? []), t] })
   }
 
   async function setCover(src: Blob | string) {
@@ -561,21 +570,32 @@ export default function App() {
           <h2>
             我的曲库 <span className="hint">{songs.length} 首</span>
           </h2>
+          {allTags.length > 0 && (
+            <div className="chips tag-filter">
+              <button className={tagFilter == null ? 'on' : ''} onClick={() => setTagFilter(null)}>
+                全部
+              </button>
+              {allTags.map((t) => (
+                <button key={t} className={tagFilter === t ? 'on' : ''} onClick={() => setTagFilter(tagFilter === t ? null : t)}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="grid">
             <button className="card new" onClick={() => (open(newSong()), setTab('edit'))}>
               ＋ 新建歌曲
             </button>
-            {songs.map((s) => (
+            {songs.filter((s) => !tagFilter || s.tags?.includes(tagFilter)).map((s) => (
               <button key={s.id} className={`card ${s.id === song.id ? 'current-card' : ''}`} onClick={() => openSaved(s.id)}>
                 <span className="card-cover">{s.cover ? <img src={s.cover} alt="" /> : <b lang="ja">{s.title.slice(0, 1)}</b>}</span>
                 <span className="card-title">{s.title}</span>
                 <span className="card-artist">{s.artist || '未填歌手'}</span>
                 {s.first && <span className="card-first" lang="ja">{s.first}</span>}
                 <span className="badges">
-                  {!!s.lines && <i>{s.lines} 句</i>}
-                  {s.timed && <i>已打点</i>}
-                  {!!s.tracks && <i>{s.tracks} 条音轨</i>}
-                  {s.trans && <i>有翻译</i>}
+                  {s.tags?.map((t) => (
+                    <i key={t}>{t}</i>
+                  ))}
                 </span>
                 <span className="card-date">{new Date(s.updated).toLocaleDateString()}</span>
               </button>
@@ -593,6 +613,35 @@ export default function App() {
             <label>
               歌手 <input value={song.artist} onChange={(e) => update({ artist: e.target.value })} />
             </label>
+            <div className="tag-edit">
+              标签
+              {song.tags?.map((t) => (
+                <span key={t} className="tag">
+                  {t}
+                  <button className="icon" title="删除标签" onClick={() => update({ tags: song.tags!.filter((x) => x !== t) })}>
+                    ×
+                  </button>
+                </span>
+              ))}
+              <input
+                list="all-tags"
+                placeholder="如 ACG、BanG Dream!，回车添加"
+                value={tagDraft}
+                onChange={(e) => setTagDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  // isComposing: Enter that confirms an IME (pinyin / kana) candidate must not add the tag yet
+                  if (e.nativeEvent.isComposing || (e.key !== 'Enter' && e.key !== ',' && e.key !== '，')) return
+                  e.preventDefault()
+                  addTag()
+                }}
+                onBlur={addTag}
+              />
+              <datalist id="all-tags">
+                {allTags.filter((t) => !song.tags?.includes(t)).map((t) => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
+            </div>
           </div>
 
           <section>

@@ -222,3 +222,10 @@ button.icon:hover { background: var(--bg); }
 .cover-hits button { display: flex; flex-direction: column; gap: 4px; padding: 6px; font-size: 12px; text-align: left; }
 .cover-hits img { width: 100%; aspect-ratio: 1; border-radius: 6px; object-fit: cover; }
 .cover-hits span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Tags */
+.tag-filter { margin: -4px 0 14px; }
+.tag-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 14px; }
+.tag { display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px 2px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 13px; }
+.tag .icon { padding: 0 4px; color: inherit; }
+.tag-edit input { width: 13em; }
