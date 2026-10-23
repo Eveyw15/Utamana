@@ -13,7 +13,7 @@ export class MixSource {
   karaoke?: AudioBuffer // original with the centre vocal band removed, built on demand (see buildKaraoke)
   // Metronome clicks are mixed in here, before SoundTouch, so they follow speed changes in perfect sync.
   clicks: Click[] = []
-  metronome = { on: false, volume: 0.6, sound: 'wood' as ClickSound }
+  metronome = { on: false, volume: 1.5, sound: 'wood' as ClickSound } // volume at the slider's max: clicks get lost under the music otherwise
   sampleRate = 44100
 
   get length() {
