@@ -56,7 +56,10 @@ export function alignTimes(times: (number | undefined)[], sections: Section[], o
       let score = -Infinity
       cands.forEach((c, i) => {
         const v = s[i] / max - (0.5 * Math.abs(c - (t - LAG))) / (BEFORE - LAG)
-        if (v > score) (score = v), (best = c)
+        if (v > score) {
+          score = v
+          best = c
+        }
       })
     }
     // Keep lines in order; if the move would cross the previous line, keep the tap.
