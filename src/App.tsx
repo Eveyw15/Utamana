@@ -95,6 +95,7 @@ export default function App() {
   const pending = useRef(new Map<string, Song>())
   const taps = useRef<{ at: number; wall: number }[]>([])
   const [metroOpen, setMetroOpen] = useState(false)
+  const [panelOpen, setPanelOpen] = useState(() => innerWidth > 900) // floating controls panel; collapsed on small screens
   const pushTimer = useRef(0)
 
   useEffect(() => {
@@ -587,8 +588,11 @@ export default function App() {
         </main>
       )}
 
-      {tab === 'practice' && (
-        <div className="controls no-print">
+      {tab === 'practice' && (panelOpen ? (
+        <div className={`controls float no-print ${metroOpen ? 'wide' : ''}`}>
+          <button className="link close" title="收起" onClick={() => setPanelOpen(false)}>
+            收起 ✕
+          </button>
           {hasAudio && (
             <>
               <div className="row">
@@ -722,7 +726,12 @@ export default function App() {
             {!hasAudio && <span className="hint">还没上传音频，可以在「编辑」里上传。</span>}
           </div>
         </div>
-      )}
+      ) : (
+        <button className="float-toggle no-print" title="速度、Key、节拍器、显示" onClick={() => setPanelOpen(true)}>
+          调节
+        </button>
+      ))}
+
 
       <article
         className={`sheet ${tab === 'edit' ? 'print-only' : ''} ${tab === 'library' || tab === 'settings' ? 'hidden' : ''}`}
