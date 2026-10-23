@@ -81,6 +81,7 @@ export default function App() {
   const [, rerender] = useState(0)
   const [time, setTime] = useState(0)
   const [tempo, setTempo] = useState(1)
+  const [tempoEdit, setTempoEdit] = useState<string | null>(null) // typed speed while the box is open
   const [semi, setSemi] = useState(0)
   const [syncAt, setSyncAt] = useState<number | null>(null)
   const activeRef = useRef<HTMLLIElement>(null)
@@ -601,7 +602,29 @@ export default function App() {
               <div className="panel-sec">
                 <div className="slider">
                   <span>速度</span>
-                  <output>{baseBpm ? `♩=${Math.round(baseBpm * tempo)}` : `${Math.round(tempo * 100)}%`}</output>
+                  {tempoEdit == null ? (
+                    <output title="双击输入" onDoubleClick={() => setTempoEdit(String(baseBpm ? +(baseBpm * tempo).toFixed(1) : Math.round(tempo * 100)))}>
+                      {baseBpm ? `♩=${Math.round(baseBpm * tempo)}` : `${Math.round(tempo * 100)}%`}
+                    </output>
+                  ) : (
+                    <input
+                      className="num"
+                      autoFocus
+                      value={tempoEdit}
+                      onChange={(e) => setTempoEdit(e.target.value)}
+                      onFocus={(e) => e.target.select()}
+                      onBlur={() => {
+                        const n = parseFloat(tempoEdit)
+                        // Same 50%-150% range as the slider; BPM when the song has one, otherwise percent.
+                        if (n > 0) setTempo(Math.min(1.5, Math.max(0.5, baseBpm ? n / baseBpm : n / 100)))
+                        setTempoEdit(null)
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.currentTarget.blur()
+                        else if (e.key === 'Escape') setTempoEdit(null)
+                      }}
+                    />
+                  )}
                   {baseBpm ? (
                     <input
                       type="range"

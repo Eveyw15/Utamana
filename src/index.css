@@ -169,7 +169,9 @@ button.link.on { background: none; color: var(--accent); }
 .slider { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 8px; margin-bottom: 8px; }
 .slider span { font-weight: 600; }
 .slider output { font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 600; }
-.slider input { grid-column: 1 / -1; width: 100%; margin: 0; }
+.slider input[type=range] { grid-column: 1 / -1; width: 100%; margin: 0; }
+.slider output { cursor: text; }
+.slider input.num { width: 5em; padding: 1px 6px; text-align: right; font-weight: 600; color: var(--accent); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chips button { border-radius: 999px; padding: 4px 12px; font-size: 13px; }
 button.icon { border: 0; background: none; padding: 2px 6px; color: var(--muted); border-radius: 999px; }
