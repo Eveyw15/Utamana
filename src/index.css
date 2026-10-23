@@ -76,7 +76,6 @@ textarea.short { min-height: 25vh; }
 .card.current-card { border-color: var(--accent-soft); }
 .card-title { font-size: 17px; font-weight: 700; }
 .card-artist { font-size: 13px; color: var(--muted); }
-.card-first { font-family: var(--lyric-font); font-size: 14px; margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; padding-top: 8px; }
 .badges i { font-style: normal; font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
 .card-date { font-size: 11px; color: var(--muted); }

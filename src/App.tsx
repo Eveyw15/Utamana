@@ -591,7 +591,6 @@ export default function App() {
                 <span className="card-cover">{s.cover ? <img src={s.cover} alt="" /> : <b lang="ja">{s.title.slice(0, 1)}</b>}</span>
                 <span className="card-title">{s.title}</span>
                 <span className="card-artist">{s.artist || '未填歌手'}</span>
-                {s.first && <span className="card-first" lang="ja">{s.first}</span>}
                 <span className="badges">
                   {s.tags?.map((t) => (
                     <i key={t}>{t}</i>
