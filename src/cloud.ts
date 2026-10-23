@@ -10,7 +10,7 @@ export const supabase = url && key ? createClient(url, key) : null
 
 const TRACKS: TrackKey[] = ['original', 'vocals', 'instrumental']
 type Revs = Partial<Record<TrackKey, number>>
-type Data = Pick<Song, 'title' | 'artist' | 'lines' | 'trans' | 'beat'> & { audio: Revs }
+type Data = Pick<Song, 'title' | 'artist' | 'lines' | 'trans' | 'beat' | 'cover'> & { audio: Revs }
 
 const audioPath = (uid: string, id: string, k: TrackKey) => `${uid}/${id}/${k}`
 
@@ -39,8 +39,8 @@ export async function pushSong(song: Song) {
       check(await supabase.storage.from('audio').remove([audioPath(uid, song.id, k)]))
     }
   }
-  const { title, artist, lines, trans, beat } = song
-  const data: Data = { title, artist, lines, trans, beat, audio }
+  const { title, artist, lines, trans, beat, cover } = song
+  const data: Data = { title, artist, lines, trans, beat, cover, audio }
   check(await supabase.from('songs').upsert({ id: song.id, data, updated: song.updated, deleted: false }))
 }
 
@@ -61,7 +61,7 @@ async function pullSong(uid: string, id: string, local?: Song): Promise<Song> {
     if (local?.audio[k] && (local.audioRev?.[k] ?? 0) === d.audio[k]) audio[k] = local.audio[k]
     else audio[k] = check(await supabase!.storage.from('audio').download(audioPath(uid, id, k))).data!
   }
-  return { id, title: d.title, artist: d.artist, lines: d.lines, trans: d.trans, beat: d.beat, audio, audioRev: d.audio, updated: row.updated }
+  return { id, title: d.title, artist: d.artist, lines: d.lines, trans: d.trans, beat: d.beat, cover: d.cover, audio, audioRev: d.audio, updated: row.updated }
 }
 
 export async function syncAll() {

@@ -3,6 +3,7 @@ import { KANJI, annotateLine, setReading, type Annotated, type Seg } from './fur
 import { alignTranslation, fmtTime, parseLyrics, toLrc } from './lrc'
 import { Player, TRACK_LABEL, type TrackKey } from './player'
 import { alignTimes } from './align'
+import { searchCovers, toCover, type CoverHit } from './cover'
 import { CLICK_LABEL, anchorFirst, beatGrid, parseSections, snapToBeat, tapFit, type ClickSound, type Section } from './beat'
 import { FONTS, applyFonts, loadFonts, type FontSettings } from './fonts'
 import { deleteRemote, pushSong, supabase, syncAll } from './cloud'
@@ -86,6 +87,8 @@ export default function App() {
   // Loop: whole song, one line, or lines from..to (indices into song.lines).
   const [loop, setLoop] = useState<{ mode: 'off' | 'song' | 'line' | 'range'; from?: number; to?: number }>({ mode: 'off' })
   const [aligning, setAligning] = useState(false)
+  const [coverHits, setCoverHits] = useState<CoverHit[] | null>(null) // online search results
+  const [coverBusy, setCoverBusy] = useState(false)
   const beforeAlign = useRef<Song['lines'] | null>(null) // lines before the last auto-align, for undo
   const [semi, setSemi] = useState(0)
   const [syncAt, setSyncAt] = useState<number | null>(null)
@@ -177,6 +180,7 @@ export default function App() {
     setDraft(toLrc(s.lines))
     setSyncAt(null)
     setLoop({ mode: 'off' })
+    setCoverHits(null)
     beforeAlign.current = null
     player.source.vocal = 1
     for (const k of TRACKS) await player.load(k, s.audio[k])
@@ -338,6 +342,29 @@ export default function App() {
       await update({ lines: song!.lines.map((l, i) => ({ ...l, time: times[i] })) })
     } finally {
       setAligning(false)
+    }
+  }
+
+  async function setCover(src: Blob | string) {
+    setCoverBusy(true)
+    try {
+      await update({ cover: await toCover(src) })
+      setCoverHits(null)
+    } catch (e) {
+      alert(`封面读取失败：${e}`)
+    } finally {
+      setCoverBusy(false)
+    }
+  }
+
+  async function findCovers() {
+    setCoverBusy(true)
+    try {
+      setCoverHits(await searchCovers(`${song!.title} ${song!.artist}`.trim()))
+    } catch (e) {
+      alert(`搜索失败：${e}`)
+    } finally {
+      setCoverBusy(false)
     }
   }
 
@@ -540,6 +567,7 @@ export default function App() {
             </button>
             {songs.map((s) => (
               <button key={s.id} className={`card ${s.id === song.id ? 'current-card' : ''}`} onClick={() => openSaved(s.id)}>
+                <span className="card-cover">{s.cover ? <img src={s.cover} alt="" /> : <b lang="ja">{s.title.slice(0, 1)}</b>}</span>
                 <span className="card-title">{s.title}</span>
                 <span className="card-artist">{s.artist || '未填歌手'}</span>
                 {s.first && <span className="card-first" lang="ja">{s.first}</span>}
@@ -566,6 +594,32 @@ export default function App() {
               歌手 <input value={song.artist} onChange={(e) => update({ artist: e.target.value })} />
             </label>
           </div>
+
+          <section>
+            <h2>封面</h2>
+            <div className="row">
+              {song.cover ? <img className="cover-preview" src={song.cover} alt="封面" /> : <span className="cover-preview empty">无封面</span>}
+              <button disabled={coverBusy || !song.title.trim()} title="用歌名和歌手在 Apple Music 搜索" onClick={findCovers}>
+                {coverBusy ? '处理中…' : '联网搜索'}
+              </button>
+              <label className="button">
+                上传图片
+                <input hidden type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && setCover(e.target.files[0])} />
+              </label>
+              {song.cover && <button onClick={() => update({ cover: undefined })}>移除</button>}
+            </div>
+            {coverHits && (
+              <div className="cover-hits">
+                {!coverHits.length && <p className="hint">没搜到，试试改一下歌名或歌手，或者自己上传。</p>}
+                {coverHits.map((h) => (
+                  <button key={h.url} title={`${h.title} · ${h.artist}\n${h.album}`} disabled={coverBusy} onClick={() => setCover(h.url)}>
+                    <img src={h.url.replace('600x600bb', '200x200bb')} alt={h.album} />
+                    <span>{h.album}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
 
           <section>
             <h2>音频</h2>

@@ -10,13 +10,14 @@ export type Song = {
   lines: Line[]
   trans?: string[] // one per non-empty lyric line
   beat?: Section[] // metronome sections, see beat.ts
+  cover?: string // album cover, small JPEG data URL (see cover.ts)
   audio: Partial<Record<TrackKey, Blob>>
   audioRev?: Partial<Record<TrackKey, number>> // bumped when a track is replaced, so sync knows what to upload
   updated: number
 }
 
 // Summary kept in the index so the library page does not load every song's audio.
-export type SongMeta = Pick<Song, 'id' | 'title' | 'artist' | 'updated'> & {
+export type SongMeta = Pick<Song, 'id' | 'title' | 'artist' | 'updated' | 'cover'> & {
   first?: string
   lines?: number
   tracks?: number
@@ -33,6 +34,7 @@ function summary(s: Song): SongMeta {
     title: s.title,
     artist: s.artist,
     updated: s.updated,
+    cover: s.cover,
     first: text[0]?.text.replace(/\{[^}]*\}/g, ''),
     lines: text.length,
     tracks: Object.keys(s.audio).length,

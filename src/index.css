@@ -210,3 +210,15 @@ button.icon:hover { background: var(--bg); }
 .loop-chip { border-radius: 999px; padding: 4px 12px; font-size: 13px; white-space: nowrap; }
 .sheet li.in-loop { border-left-color: var(--indigo); background: color-mix(in srgb, var(--indigo) 7%, transparent); }
 .app.practice .sheet.timed li.in-loop { opacity: 1; }
+
+/* Covers */
+.card { overflow: hidden; }
+.card-cover { display: grid; place-items: center; width: 100%; aspect-ratio: 1; margin-bottom: 8px; border-radius: 10px; overflow: hidden; background: linear-gradient(135deg, var(--accent-soft), var(--hl)); }
+.card-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card-cover b { font-size: 48px; color: var(--accent); font-family: var(--lyric-font); }
+.cover-preview { width: 96px; height: 96px; border-radius: 10px; object-fit: cover; box-shadow: var(--shadow); }
+.cover-preview.empty { display: grid; place-items: center; font-size: 13px; color: var(--muted); background: var(--bg); box-shadow: none; }
+.cover-hits { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; margin-top: 8px; }
+.cover-hits button { display: flex; flex-direction: column; gap: 4px; padding: 6px; font-size: 12px; text-align: left; }
+.cover-hits img { width: 100%; aspect-ratio: 1; border-radius: 6px; object-fit: cover; }
+.cover-hits span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
