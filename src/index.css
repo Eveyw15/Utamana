@@ -188,6 +188,11 @@ button.icon:hover { background: var(--bg); }
 @media (min-width: 1000px) {
   .app.practice.with-panel { max-width: 1240px; padding-right: 296px; }
 }
+/* Very wide screens: keep the lyrics centred on the page and park the panel beside them. */
+@media (min-width: 1580px) {
+  .app.practice.with-panel { max-width: 960px; padding-right: 16px; }
+  .panel, .float-toggle { right: auto; left: calc(50% + 504px); }
+}
 /* Lyrics read like Apple Music: no card, the sung line stands out and the rest fades back. */
 .app.practice .sheet { background: none; box-shadow: none; padding-top: 12px; -webkit-mask-image: linear-gradient(transparent, #000 6%, #000 90%, transparent); mask-image: linear-gradient(transparent, #000 6%, #000 90%, transparent); }
 .app.practice .sheet.timed li:not(.gap) { opacity: .5; transition: opacity .3s, background .2s; }

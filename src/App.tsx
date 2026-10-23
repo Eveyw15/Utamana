@@ -218,7 +218,11 @@ export default function App() {
 
   // Keep the sung line centred, Apple Music style, unless the user scrolled away in the last 4 s.
   useEffect(() => {
-    if (performance.now() - manualScroll.current > 4000) activeRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    const li = activeRef.current
+    if (!li || performance.now() - manualScroll.current < 4000) return
+    // Centre on the whole window, a little above the middle, not on the lyrics box (which sits low).
+    const r = li.getBoundingClientRect()
+    li.closest('.sheet')?.scrollBy({ top: r.top + r.height / 2 - innerHeight * 0.45, behavior: 'smooth' })
   }, [active])
 
   // Tap-to-sync: Space stamps the current line, Backspace steps back.
