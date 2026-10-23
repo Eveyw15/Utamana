@@ -241,4 +241,4 @@ button.icon:hover { background: var(--bg); }
 .tag-filter .play { padding: 4px 14px; }
 .edit .save { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .queue { display: inline-flex; align-items: center; gap: 2px; padding-right: 8px; border-right: 1px solid var(--line); }
-.card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
+.card-foot { display: flex; flex-direction: row-reverse; align-items: center; justify-content: space-between; gap: 8px; width: 100%; } /* status left, date right */
