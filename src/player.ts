@@ -1,5 +1,6 @@
 import { SimpleFilter, SoundTouch, getWebAudioNode } from 'soundtouchjs'
 import { CLICK_SECONDS, clickSample, type Click, type ClickSound } from './beat.ts'
+import { onsetStrength } from './align.ts'
 
 export type TrackKey = 'original' | 'vocals' | 'instrumental'
 export const TRACK_LABEL: Record<TrackKey, string> = { original: '原曲', vocals: '人声', instrumental: '伴奏' }
@@ -30,20 +31,43 @@ export class MixSource {
     return [[vocals, v], [instrumental, 1]]
   }
 
+  // Loop [start, end) in samples. Positions past the end map back into the loop, so SoundTouch
+  // keeps streaming without a seek and the loop is gapless.
+  loop: [number, number] | null = null
+
+  wrap(p: number) {
+    if (!this.loop) return p
+    const [a, b] = this.loop
+    return p < b ? p : a + ((p - a) % (b - a))
+  }
+
   extract(target: Float32Array, numFrames: number, position: number) {
+    let done = 0
+    while (done < numFrames) {
+      const real = this.wrap(position + done)
+      const want = this.loop ? Math.min(numFrames - done, this.loop[1] - real) : numFrames - done
+      const got = this.fill(target, done, want, real)
+      done += got
+      if (got < want) break // end of the song
+    }
+    return done
+  }
+
+  fill(target: Float32Array, offset: number, numFrames: number, position: number) {
     const n = Math.max(0, Math.min(numFrames, this.length - position))
-    target.fill(0, 0, n * 2)
+    target.fill(0, offset * 2, (offset + n) * 2)
+    const out = target.subarray(offset * 2)
     for (const [buf, g] of this.layers()) {
       if (!buf || !g) continue
       const l = buf.getChannelData(0)
       const r = buf.numberOfChannels > 1 ? buf.getChannelData(1) : l
       const end = Math.min(n, buf.length - position)
       for (let i = 0; i < end; i++) {
-        target[i * 2] += l[i + position] * g
-        target[i * 2 + 1] += r[i + position] * g
+        out[i * 2] += l[i + position] * g
+        out[i * 2 + 1] += r[i + position] * g
       }
     }
-    if (this.metronome.on) this.mixClicks(target, n, position)
+    if (this.metronome.on) this.mixClicks(out, n, position)
     return n
   }
 
@@ -87,14 +111,24 @@ export class Player {
   }
   // Position fed into SoundTouch; runs ahead of what you hear while playing.
   get currentTime() {
-    return this.filter.sourcePosition / this.sampleRate
+    return this.source.wrap(this.filter.sourcePosition) / this.sampleRate
   }
   // shortcut: latency estimated as the ScriptProcessor buffer, SoundTouch's internal buffer and the
   // device output latency; measure it if taps still land early or late.
   get heardTime() {
     if (!this.playing) return this.currentTime
     const seconds = (4096 + 4096) / this.sampleRate + (this.ctx.outputLatency || 0) + this.ctx.baseLatency
-    return Math.max(0, this.currentTime - seconds * this.st.tempo)
+    return this.source.wrap(Math.max(0, this.filter.sourcePosition - seconds * this.st.tempo * this.sampleRate)) / this.sampleRate
+  }
+
+  // Loop between two times (seconds), or null to stop looping. Jumps into the loop if outside it.
+  setLoop(range: [number, number] | null) {
+    const now = this.currentTime
+    const loop = range && range[1] - range[0] > 0.05 ? ([Math.round(range[0] * this.sampleRate), Math.round(range[1] * this.sampleRate)] as [number, number]) : null
+    if (String(loop) === String(this.source.loop)) return
+    this.source.loop = loop
+    // The raw feed position may be past the old loop end; restart from a real position.
+    this.seek(loop && (now < range![0] || now >= range![1]) ? range![0] : now)
   }
 
   async load(key: TrackKey, blob: Blob | undefined) {
@@ -132,6 +166,21 @@ export class Player {
     if (this.source.tracks.original === buf) this.source.karaoke = out
     this.karaokeBusy = false
     this.onState()
+  }
+
+  // Voice-band (200 Hz - 3.5 kHz) mono mix of the vocal stem, or of the original if there is none,
+  // turned into per-frame onset strength for aligning lyric lines (see align.ts).
+  async vocalOnsets() {
+    const buf = this.source.tracks.vocals ?? this.source.tracks.original
+    if (!buf) return null
+    const off = new OfflineAudioContext(1, buf.length, buf.sampleRate)
+    let node: AudioNode = new AudioBufferSourceNode(off, { buffer: buf })
+    const src = node as AudioBufferSourceNode
+    for (const [type, frequency] of [['highpass', 200], ['highpass', 200], ['lowpass', 3500], ['lowpass', 3500]] as const)
+      node = node.connect(new BiquadFilterNode(off, { type, frequency }))
+    node.connect(off.destination)
+    src.start()
+    return onsetStrength((await off.startRendering()).getChannelData(0), buf.sampleRate)
   }
 
   clear() {

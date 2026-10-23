@@ -15,3 +15,12 @@ test('vocal level only moves the voice, backing stays put', () => {
   s.extract(out, 4, 0)
   assert.ok(Math.abs(out[0] - 0.3) < 1e-6) // stems win, original unused
 })
+
+test('loop wraps without a gap', () => {
+  const ramp = { length: 6, numberOfChannels: 1, getChannelData: () => Float32Array.from([0, 1, 2, 3, 4, 5]) } as unknown as AudioBuffer
+  const m = Object.assign(new MixSource(), { tracks: { instrumental: ramp }, loop: [1, 3] as [number, number] })
+  const out = new Float32Array(12)
+  assert.equal(m.extract(out, 6, 0), 6)
+  assert.deepEqual([...out].filter((_, i) => i % 2 === 0), [0, 1, 2, 1, 2, 1])
+  assert.equal(m.wrap(8), 2)
+})

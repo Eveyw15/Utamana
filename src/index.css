@@ -205,3 +205,8 @@ button.icon:hover { background: var(--bg); }
   .app.practice .sheet { overflow: visible; }
   .app.practice .sheet ol { padding-bottom: 0; }
 }
+
+/* Loop */
+.loop-chip { border-radius: 999px; padding: 4px 12px; font-size: 13px; white-space: nowrap; }
+.sheet li.in-loop { border-left-color: var(--indigo); background: color-mix(in srgb, var(--indigo) 7%, transparent); }
+.app.practice .sheet.timed li.in-loop { opacity: 1; }

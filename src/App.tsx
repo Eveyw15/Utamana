@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { KANJI, annotateLine, setReading, type Annotated, type Seg } from './furigana'
 import { alignTranslation, fmtTime, parseLyrics, toLrc } from './lrc'
 import { Player, TRACK_LABEL, type TrackKey } from './player'
+import { alignTimes } from './align'
 import { CLICK_LABEL, anchorFirst, beatGrid, parseSections, snapToBeat, tapFit, type ClickSound, type Section } from './beat'
 import { FONTS, applyFonts, loadFonts, type FontSettings } from './fonts'
 import { deleteRemote, pushSong, supabase, syncAll } from './cloud'
@@ -82,6 +83,10 @@ export default function App() {
   const [time, setTime] = useState(0)
   const [tempo, setTempo] = useState(1)
   const [tempoEdit, setTempoEdit] = useState<string | null>(null) // typed speed while the box is open
+  // Loop: whole song, one line, or lines from..to (indices into song.lines).
+  const [loop, setLoop] = useState<{ mode: 'off' | 'song' | 'line' | 'range'; from?: number; to?: number }>({ mode: 'off' })
+  const [aligning, setAligning] = useState(false)
+  const beforeAlign = useRef<Song['lines'] | null>(null) // lines before the last auto-align, for undo
   const [semi, setSemi] = useState(0)
   const [syncAt, setSyncAt] = useState<number | null>(null)
   const activeRef = useRef<HTMLLIElement>(null)
@@ -167,6 +172,8 @@ export default function App() {
     setSong(s)
     setDraft(toLrc(s.lines))
     setSyncAt(null)
+    setLoop({ mode: 'off' })
+    beforeAlign.current = null
     player.source.vocal = 1
     for (const k of TRACKS) await player.load(k, s.audio[k])
   }
@@ -209,6 +216,20 @@ export default function App() {
     player.source.clicks = beatGrid(song?.beat ?? [], player.duration, player.sampleRate)
   }, [JSON.stringify(song?.beat), player.duration])
   useEffect(() => void (player.semitones = semi), [semi])
+
+  useEffect(() => {
+    const lines = song?.lines ?? []
+    // A line ends where the next timed line starts, or at the end of the song.
+    const end = (j: number) => lines.slice(j + 1).find((l) => l.time != null && l.time > lines[j].time!)?.time ?? player.duration
+    const { mode, from, to } = loop
+    const a = from != null ? Math.min(from, to ?? from) : -1, b = from != null ? Math.max(from, to ?? from) : -1
+    player.setLoop(
+      mode === 'song' ? [0, player.duration]
+      : mode === 'line' && lines[a]?.time != null ? [lines[a].time!, end(a)]
+      : mode === 'range' && to != null && lines[a]?.time != null ? [lines[a].time!, end(b)]
+      : null,
+    )
+  }, [loop, song?.lines, player.duration])
 
   const active = useMemo(() => {
     let idx = -1
@@ -281,6 +302,45 @@ export default function App() {
   }
   const timed = song.lines.some((l) => l.time != null)
   const nextSync = syncAt == null ? -1 : song.lines.findIndex((l, i) => i >= syncAt && l.text)
+
+  function clickLine(i: number, t: number) {
+    manualScroll.current = 0
+    if (loop.mode === 'line') setLoop({ mode: 'line', from: i })
+    else if (loop.mode === 'range') {
+      // First click picks the start, second the end; a third starts over.
+      if (loop.from != null && loop.to == null && loop.from !== i) return setLoop({ ...loop, to: i })
+      setLoop({ mode: 'range', from: i })
+    }
+    player.seek(t)
+    setTime(t)
+  }
+
+  function cycleLoop() {
+    const next = ({ off: 'song', song: timed ? 'line' : 'off', line: 'range', range: 'off' } as const)[loop.mode]
+    const here = active >= 0 ? active : song!.lines.findIndex((l) => l.time != null)
+    setLoop(next === 'line' || next === 'range' ? { mode: next, from: here } : { mode: next })
+  }
+
+  const inLoop = (i: number) => {
+    const { mode, from, to } = loop
+    if ((mode !== 'line' && mode !== 'range') || from == null) return false
+    return i >= Math.min(from, to ?? from) && i <= Math.max(from, to ?? from) && !!song!.lines[i].text
+  }
+
+  async function autoAlign() {
+    setAligning(true)
+    try {
+      const onset = await player.vocalOnsets()
+      if (!onset) return
+      // Always start from the hand taps, so pressing it again gives the same result instead of drifting.
+      const tapped = beforeAlign.current?.length === song!.lines.length ? beforeAlign.current : song!.lines
+      const times = alignTimes(tapped.map((l) => l.time), song!.beat ?? [], onset)
+      beforeAlign.current = tapped
+      await update({ lines: song!.lines.map((l, i) => ({ ...l, time: times[i] })) })
+    } finally {
+      setAligning(false)
+    }
+  }
 
   async function setAudio(k: TrackKey, file?: File) {
     const audio = { ...song!.audio }
@@ -757,6 +817,14 @@ export default function App() {
                     结束打点
                   </button>
                 ))}
+              {hasAudio && timed && syncAt == null && (
+                <button disabled={aligning} title="在每句打的点附近找人声开始的位置，对齐到节拍（16 分音符）" onClick={autoAlign}>
+                  {aligning ? '校准中…' : '自动校准打点'}
+                </button>
+              )}
+              {beforeAlign.current && (
+                <button onClick={() => (update({ lines: song.lines.map((l, i) => ({ ...l, time: beforeAlign.current![i]?.time ?? l.time })) }), (beforeAlign.current = null))}>撤销校准</button>
+              )}
               <button onClick={() => window.print()}>打印 / PDF</button>
             </div>
             {syncAt != null && <p className="hint">每句开始唱时按空格，按退格回到上一句</p>}
@@ -786,8 +854,8 @@ export default function App() {
             <li
               key={i}
               ref={i === active ? activeRef : undefined}
-              className={[!l.text && 'gap', i === active && 'active', i === nextSync && 'next'].filter(Boolean).join(' ')}
-              onClick={() => l.time != null && syncAt == null && ((manualScroll.current = 0), player.seek(l.time), setTime(l.time))}
+              className={[!l.text && 'gap', i === active && 'active', i === nextSync && 'next', inLoop(i) && 'in-loop'].filter(Boolean).join(' ')}
+              onClick={() => l.time != null && syncAt == null && clickLine(i, l.time)}
             >
               {l.text && <LyricLine a={annotated[i]} trans={song.trans?.[all.slice(0, i).filter((x) => x.text).length]} show={show} onRuby={(s) => editReading(i, s)} />}
               {l.text && (
@@ -835,6 +903,13 @@ export default function App() {
               />
             </span>
           </div>
+          <button
+            className={`loop-chip ${loop.mode !== 'off' ? 'on' : ''}`}
+            title="循环：关 → 单曲 → 单句 → 范围（点两句歌词选范围）"
+            onClick={cycleLoop}
+          >
+            🔁 {{ off: '循环', song: '单曲', line: '单句', range: loop.to == null ? '点终点句' : '范围' }[loop.mode]}
+          </button>
           {canVocal && (
             <div className="pop" tabIndex={0} title={onlyOriginal ? '只有原曲时按频段去掉居中的人声，效果有限；上传分离好的人声和伴奏效果最好' : '伴奏音量不变，只调人声'}>
               🎤 {player.karaokeBusy ? '处理中…' : `${Math.round(player.source.vocal * 100)}%`}
