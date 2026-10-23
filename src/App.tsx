@@ -203,17 +203,12 @@ export default function App() {
     }
   }, [song?.lines.map((l) => l.text).join('\n')])
 
-  // Playhead polling while playing.
+  // Playhead polling on a timer that always runs (not tied to a play re-render or to rAF, which can stall),
+  // so the bar follows playback however it was started.
   useEffect(() => {
-    if (!player.playing) return
-    let raf = 0
-    const tick = () => {
-      setTime(player.heardTime)
-      raf = requestAnimationFrame(tick)
-    }
-    tick()
-    return () => cancelAnimationFrame(raf)
-  }, [player.playing])
+    const id = setInterval(() => player.playing && setTime(player.heardTime), 40)
+    return () => clearInterval(id)
+  }, [])
 
   useEffect(() => void (player.tempo = tempo), [tempo])
   useEffect(() => {
