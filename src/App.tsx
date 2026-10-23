@@ -94,6 +94,12 @@ export default function App() {
   const [fonts, setFonts] = useState<FontSettings>(loadFonts)
   const [user, setUser] = useState<string | null>(null) // signed-in email
   const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'error'>('idle')
+  const [syncError, setSyncError] = useState('')
+  const syncFailed = (e: unknown) => {
+    console.error(e)
+    setSyncError((e as { message?: string })?.message ?? String(e))
+    setSyncState('error')
+  }
   const [loginEmail, setLoginEmail] = useState('')
   const [loginSent, setLoginSent] = useState(false)
   const songRef = useRef(song)
@@ -125,8 +131,7 @@ export default function App() {
       if (list[0] && !list.some((s) => s.id === songRef.current?.id)) await openSaved(list[0].id)
       setSyncState('idle')
     } catch (e) {
-      console.error(e)
-      setSyncState('error')
+      syncFailed(e)
     }
   }
 
@@ -143,8 +148,7 @@ export default function App() {
         for (const x of batch) await pushSong(x)
         setSyncState('idle')
       } catch (e) {
-        console.error(e)
-        setSyncState('error')
+        syncFailed(e)
       }
     }, 2000)
   }
@@ -464,7 +468,11 @@ export default function App() {
             编辑
           </button>
         </nav>
-        {user && <span className={`sync ${syncState}`}>{{ idle: '已同步', syncing: '同步中…', error: '同步失败' }[syncState]}</span>}
+        {user && (
+          <span className={`sync ${syncState}`} title={syncState === 'error' ? syncError : undefined}>
+            {{ idle: '已同步', syncing: '同步中…', error: `同步失败：${syncError}` }[syncState]}
+          </span>
+        )}
         <button className={`gear ${tab === 'settings' ? 'on' : ''}`} title="设置" onClick={() => setTab(tab === 'settings' ? 'practice' : 'settings')}>
           设置
         </button>
@@ -641,7 +649,7 @@ export default function App() {
               onClick={async () => {
                 if (!confirm(`删除「${song.title}」？歌词和音频都会删掉，不能恢复。`)) return
                 await deleteSong(song.id)
-                deleteRemote(song.id).catch(() => setSyncState('error'))
+                deleteRemote(song.id).catch(syncFailed)
                 setSongs(await listSongs())
                 open(newSong())
                 setTab('library')
