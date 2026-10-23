@@ -382,7 +382,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app ${tab === 'practice' ? 'practice' : ''}`}>
+    <div className={`app ${tab === 'practice' ? 'practice' : ''} ${tab === 'practice' && panelOpen ? 'with-panel' : ''}`}>
       <header className="no-print">
         <button className="logo" onClick={() => setTab('library')}>
           うたまな<small>Utamana</small>
@@ -589,50 +589,59 @@ export default function App() {
       )}
 
       {tab === 'practice' && (panelOpen ? (
-        <div className={`controls float no-print ${metroOpen ? 'wide' : ''}`}>
-          <button className="link close" title="收起" onClick={() => setPanelOpen(false)}>
-            收起 ✕
-          </button>
+        <aside className={`panel no-print ${metroOpen ? 'wide' : ''}`}>
+          <div className="panel-head">
+            <b>练习设置</b>
+            <button className="icon" title="收起" onClick={() => setPanelOpen(false)}>
+              ✕
+            </button>
+          </div>
           {hasAudio && (
             <>
-              <div className="row">
-                {baseBpm ? (
-                  <label title={`原速 ${baseBpm} BPM`}>
-                    速度 ♩={Math.round(baseBpm * tempo)}
+              <div className="panel-sec">
+                <div className="slider">
+                  <span>速度</span>
+                  <output>{baseBpm ? `♩=${Math.round(baseBpm * tempo)}` : `${Math.round(tempo * 100)}%`}</output>
+                  {baseBpm ? (
                     <input
                       type="range"
+                      title={`原速 ${baseBpm} BPM`}
                       min={Math.round(baseBpm * 0.5)}
                       max={Math.round(baseBpm * 1.5)}
                       step={1}
                       value={Math.round(baseBpm * tempo)}
                       onChange={(e) => setTempo(+e.target.value / baseBpm)}
                     />
-                  </label>
-                ) : (
-                  <label>
-                    速度 {Math.round(tempo * 100)}%
+                  ) : (
                     <input type="range" min={0.5} max={1.5} step={0.05} value={tempo} onChange={(e) => setTempo(+e.target.value)} />
-                  </label>
-                )}
-                <label>
-                  Key {semi > 0 ? `+${semi}` : semi}
+                  )}
+                </div>
+                <div className="slider">
+                  <span>Key</span>
+                  <output>{semi > 0 ? `+${semi}` : semi}</output>
                   <input type="range" min={-6} max={6} step={1} value={semi} onChange={(e) => setSemi(+e.target.value)} />
-                </label>
-                <button onClick={() => (setTempo(1), setSemi(0))}>复原</button>
-              </div>
-              <div className="row">
-                <label>
-                  <input type="checkbox" checked={metro.on} onChange={(e) => setMetro({ on: e.target.checked })} />
-                  节拍器
-                </label>
-                <button className={taps.current.length ? 'on' : ''} disabled={!player.playing} title="播放时跟着拍子点，或按 T 键" onClick={tap}>
-                  点按测速 (T){taps.current.length ? ` · ${taps.current.length}` : ''}
-                </button>
-                {baseBpm && <span className="hint">{song.beat!.length > 1 ? `${song.beat!.length} 段，` : ''}原速 ♩={baseBpm}</span>}
-                <button className={`link ${metroOpen ? 'on' : ''}`} onClick={() => setMetroOpen(!metroOpen)}>
-                  节拍器设置 {metroOpen ? '▴' : '▾'}
+                </div>
+                <button className="link" disabled={tempo === 1 && semi === 0} onClick={() => (setTempo(1), setSemi(0))}>
+                  复原速度和 Key
                 </button>
               </div>
+              <div className="panel-sec">
+                <div className="sec-title">
+                  <span>节拍器</span>
+                  {baseBpm && <span className="hint">{song.beat!.length > 1 ? `${song.beat!.length} 段 · ` : ''}♩={baseBpm}</span>}
+                  <label className="switch" title="开关节拍器">
+                    <input type="checkbox" checked={metro.on} onChange={(e) => setMetro({ on: e.target.checked })} />
+                    <i />
+                  </label>
+                </div>
+                <div className="chips">
+                  <button className={taps.current.length ? 'on' : ''} disabled={!player.playing} title="播放时跟着拍子点，或按 T 键" onClick={tap}>
+                    点按测速 T{taps.current.length ? ` · ${taps.current.length}` : ''}
+                  </button>
+                  <button className={metroOpen ? 'on' : ''} onClick={() => setMetroOpen(!metroOpen)}>
+                    分段设置 {metroOpen ? '▴' : '▾'}
+                  </button>
+                </div>
               {metroOpen && (
               <div className="metro-details">
                 <div className="row">
@@ -696,45 +705,46 @@ export default function App() {
                 <p className="hint">播放时跟着拍子点「点按测速」或按 T，点 4 下以上就设好 BPM，第一下当作小节第一拍。变拍子的地方点「从当前位置变拍」，会自动对齐到前一段最近的拍子；差一拍就用 ‹ › 挪。</p>
               </div>
               )}
+              </div>
             </>
           )}
-          <div className="row">
-            <label>
-              <input type="checkbox" checked={show.kana} onChange={(e) => setShow({ ...show, kana: e.target.checked })} />
-              假名
-            </label>
-            <label>
-              <input type="checkbox" checked={show.romaji} onChange={(e) => setShow({ ...show, romaji: e.target.checked })} />
-              罗马音
-            </label>
-            <label>
-              <input type="checkbox" checked={show.trans} onChange={(e) => setShow({ ...show, trans: e.target.checked })} />
-              翻译
-            </label>
-            {hasAudio &&
-              (syncAt == null ? (
-                <button onClick={() => (setSyncAt(0), player.seek(0), player.play())}>{timed ? '重新打点' : '开始打点'}</button>
-              ) : (
-                <>
+          <div className="panel-sec">
+            <div className="sec-title">
+              <span>显示</span>
+            </div>
+            <div className="chips">
+              {(['kana', 'romaji', 'trans'] as const).map((k) => (
+                <button key={k} className={show[k] ? 'on' : ''} onClick={() => setShow({ ...show, [k]: !show[k] })}>
+                  {{ kana: '假名', romaji: '罗马音', trans: '翻译' }[k]}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="panel-sec">
+            <div className="chips">
+              {hasAudio &&
+                (syncAt == null ? (
+                  <button onClick={() => (setSyncAt(0), player.seek(0), player.play())}>{timed ? '重新打点' : '开始打点'}</button>
+                ) : (
                   <button className="on" onClick={() => setSyncAt(null)}>
                     结束打点
                   </button>
-                  <span className="hint">每句开始唱时按空格，按退格回到上一句</span>
-                </>
-              ))}
-            <button onClick={() => window.print()}>打印 / 导出 PDF</button>
-            {!hasAudio && <span className="hint">还没上传音频，可以在「编辑」里上传。</span>}
+                ))}
+              <button onClick={() => window.print()}>打印 / PDF</button>
+            </div>
+            {syncAt != null && <p className="hint">每句开始唱时按空格，按退格回到上一句</p>}
+            {!hasAudio && <p className="hint">还没上传音频，可以在「编辑」里上传。</p>}
           </div>
-        </div>
+        </aside>
       ) : (
         <button className="float-toggle no-print" title="速度、Key、节拍器、显示" onClick={() => setPanelOpen(true)}>
-          调节
+          ⚙ 练习设置
         </button>
       ))}
 
 
       <article
-        className={`sheet ${tab === 'edit' ? 'print-only' : ''} ${tab === 'library' || tab === 'settings' ? 'hidden' : ''}`}
+        className={`sheet ${timed ? 'timed' : ''} ${tab === 'edit' ? 'print-only' : ''} ${tab === 'library' || tab === 'settings' ? 'hidden' : ''}`}
         onWheel={() => (manualScroll.current = performance.now())}
         onTouchMove={() => (manualScroll.current = performance.now())}
         onMouseDown={(e) => e.target === e.currentTarget && (manualScroll.current = performance.now())} // scrollbar drag

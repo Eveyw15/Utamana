@@ -149,17 +149,45 @@ ruby.editable:hover { background: var(--accent-soft); }
 .transport label input[type='range'] { width: 90px; }
 button.link { border: 0; background: none; padding: 4px 2px; font-size: 13px; color: var(--muted); }
 button.link.on { background: none; color: var(--accent); }
-/* Practice controls float at the side so the lyrics get the full height. */
-.controls.float { position: fixed; right: 16px; top: 72px; z-index: 4; width: 250px; max-height: calc(100vh - 170px); overflow-y: auto; padding: 8px 14px; margin: 0; }
-.controls.float.wide { width: min(460px, calc(100vw - 32px)); }
-.controls.float .row { gap: 8px 12px; margin: 6px 0; }
-.controls.float label:has(input[type=range]) { flex-basis: 100%; }
-.controls.float input[type=range] { flex: 1; min-width: 0; }
-.controls.float { padding-top: 24px; }
-.controls.float .close { position: absolute; top: 2px; right: 8px; }
-.float-toggle { position: fixed; right: 16px; top: 72px; z-index: 4; border-radius: 999px; box-shadow: var(--shadow); }
+/* Practice settings panel: docked to the right of the lyrics on wide screens, floating on narrow ones. */
+.panel { position: fixed; z-index: 4; top: 68px; right: max(16px, calc((100vw - 1240px) / 2 + 16px)); width: 264px; max-height: calc(100dvh - 150px); overflow-y: auto; background: var(--paper); border-radius: 18px; box-shadow: var(--shadow); padding: 4px 16px 12px; font-size: 14px; }
+.panel.wide { width: min(480px, calc(100vw - 32px)); }
+.panel-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 0 4px; }
+.panel-head b { font-size: 13px; color: var(--muted); font-weight: 600; letter-spacing: .08em; }
+.panel-sec { padding: 10px 0; border-top: 1px solid var(--line); }
+.panel-head + .panel-sec { border-top: 0; padding-top: 2px; }
+.panel .hint { font-size: 12px; }
+.sec-title { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-weight: 600; }
+.sec-title .switch { margin-left: auto; }
+.slider { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 8px; margin-bottom: 8px; }
+.slider span { font-weight: 600; }
+.slider output { font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 600; }
+.slider input { grid-column: 1 / -1; width: 100%; margin: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { border-radius: 999px; padding: 4px 12px; font-size: 13px; }
+button.icon { border: 0; background: none; padding: 2px 6px; color: var(--muted); border-radius: 999px; }
+button.icon:hover { background: var(--bg); }
+.switch { position: relative; display: inline-block; width: 36px; height: 20px; cursor: pointer; }
+.switch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.switch i { position: absolute; inset: 0; border-radius: 999px; background: var(--line); transition: background .2s; }
+.switch i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .2); transition: transform .2s; }
+.switch input:checked + i { background: var(--accent); }
+.switch input:checked + i::after { transform: translateX(16px); }
+.panel .metro-details { margin: 10px 0 0; max-height: none; overflow: visible; }
+.float-toggle { position: fixed; z-index: 4; top: 68px; right: max(16px, calc((100vw - 1240px) / 2 + 16px)); border-radius: 999px; box-shadow: var(--shadow); font-size: 13px; }
+/* Wide screens: make room so the docked panel sits beside the lyrics instead of over them. */
+@media (min-width: 1000px) {
+  .app.practice.with-panel { max-width: 1240px; padding-right: 296px; }
+}
+/* Lyrics read like Apple Music: no card, the sung line stands out and the rest fades back. */
+.app.practice .sheet { background: none; box-shadow: none; padding-top: 12px; -webkit-mask-image: linear-gradient(transparent, #000 6%, #000 90%, transparent); mask-image: linear-gradient(transparent, #000 6%, #000 90%, transparent); }
+.app.practice .sheet.timed li:not(.gap) { opacity: .5; transition: opacity .3s, background .2s; }
+.app.practice .sheet.timed li.active, .app.practice .sheet.timed li:hover, .app.practice .sheet.timed li.next { opacity: 1; }
+.app.practice .sheet li.active { background: var(--paper); box-shadow: var(--shadow); }
 @media print {
-  .app.practice { height: auto; display: block; }
+  .app.practice { height: auto; display: block; padding-right: 0; }
+  .app.practice .sheet li:not(.gap) { opacity: 1; }
+  .app.practice .sheet { -webkit-mask-image: none; mask-image: none; }
   .app.practice .sheet { overflow: visible; }
   .app.practice .sheet ol { padding-bottom: 0; }
 }
