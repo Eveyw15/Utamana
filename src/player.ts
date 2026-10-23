@@ -96,12 +96,13 @@ export class Player {
   ctx = new AudioContext()
   source = Object.assign(new MixSource(), { sampleRate: this.ctx.sampleRate })
   st = new SoundTouch()
-  filter = new SimpleFilter(this.source, this.st, () => this.pause())
+  filter = new SimpleFilter(this.source, this.st, () => (this.pause(), this.onEnd()))
   node = getWebAudioNode(this.ctx, this.filter)
   master = this.ctx.createGain()
   playing = false
   karaokeBusy = false
   onState: () => void = () => {}
+  onEnd: () => void = () => {} // the song played to its end (never fires while looping)
 
   get sampleRate() {
     return this.ctx.sampleRate

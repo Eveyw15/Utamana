@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { KANJI, annotateLine, setReading, type Annotated, type Seg } from './furigana'
 import { alignTranslation, fmtTime, parseLyrics, toLrc } from './lrc'
 import { Player, TRACK_LABEL, type TrackKey } from './player'
@@ -51,6 +51,52 @@ function LyricLine({ a, trans, show, onRuby }: LineProps) {
   )
 }
 
+const STATUS = { want: '想学', learning: '正在学', learned: '已学会' } as const
+type Status = keyof typeof STATUS
+const nextStatus = (s?: Status) => ({ none: 'want', want: 'learning', learning: 'learned', learned: undefined } as const)[s ?? 'none']
+
+// Free-text chips (tags, playlists): Enter or a comma adds, × removes, earlier values are suggested.
+function ChipsInput({ label, values = [], options, placeholder, onChange }: { label: string; values?: string[]; options: string[]; placeholder: string; onChange: (v: string[]) => void }) {
+  const [draft, setDraft] = useState('')
+  const id = useId()
+  const add = () => {
+    const t = draft.trim()
+    setDraft('')
+    if (t && !values.includes(t)) onChange([...values, t])
+  }
+  return (
+    <div className="tag-edit">
+      {label}
+      {values.map((t) => (
+        <span key={t} className="tag">
+          {t}
+          <button className="icon" title="删除" onClick={() => onChange(values.filter((x) => x !== t))}>
+            ×
+          </button>
+        </span>
+      ))}
+      <input
+        list={id}
+        placeholder={placeholder}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          // isComposing: Enter that confirms an IME (pinyin / kana) candidate must not add the chip yet
+          if (e.nativeEvent.isComposing || (e.key !== 'Enter' && e.key !== ',' && e.key !== '，')) return
+          e.preventDefault()
+          add()
+        }}
+        onBlur={add}
+      />
+      <datalist id={id}>
+        {options.filter((t) => !values.includes(t)).map((t) => (
+          <option key={t} value={t} />
+        ))}
+      </datalist>
+    </div>
+  )
+}
+
 function FontPicker({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   const custom = !FONTS.some((f) => f.css === value)
   return (
@@ -89,8 +135,10 @@ export default function App() {
   const [aligning, setAligning] = useState(false)
   const [coverHits, setCoverHits] = useState<CoverHit[] | null>(null) // online search results
   const [coverBusy, setCoverBusy] = useState(false)
-  const [tagFilter, setTagFilter] = useState<string | null>(null) // library: only songs with this tag
-  const [tagDraft, setTagDraft] = useState('')
+  // Library filter: 'fav', 'status:<s>', 'list:<name>' or 'tag:<name>'.
+  const [filter, setFilter] = useState<string | null>(null)
+  const [queue, setQueue] = useState<{ name: string; ids: string[] } | null>(null) // practising a playlist
+  const [savedAt, setSavedAt] = useState(0)
   const beforeAlign = useRef<Song['lines'] | null>(null) // lines before the last auto-align, for undo
   const [semi, setSemi] = useState(0)
   const [syncAt, setSyncAt] = useState<number | null>(null)
@@ -165,8 +213,8 @@ export default function App() {
     listSongs().then(async (list) => {
       setSongs(list)
       const recent = list[0] && (await loadSong(list[0].id))
-      // Empty library starts in the editor; otherwise go straight to practising the latest song.
-      setTab(recent ? 'practice' : 'edit')
+      // No songs: editor. One song: practise it. More: the library.
+      setTab(list.length > 1 ? 'library' : recent ? 'practice' : 'edit')
       await open(recent || newSong())
     })
   }, [])
@@ -195,6 +243,56 @@ export default function App() {
     await saveSong(next)
     setSongs(await listSongs())
     queuePush(next)
+    setSavedAt(Date.now())
+  }
+
+  // Edits already save on every change; this is for peace of mind and uploads right away.
+  async function saveNow() {
+    if (!song) return
+    await saveSong(song)
+    setSongs(await listSongs())
+    setSavedAt(Date.now())
+    if (!user) return
+    clearTimeout(pushTimer.current)
+    pending.current.delete(song.id)
+    setSyncState('syncing')
+    try {
+      await pushSong(song)
+      setSyncState('idle')
+    } catch (e) {
+      syncFailed(e)
+    }
+  }
+
+  // Song metadata edited from a library card (no need to open the song).
+  async function patchSong(id: string, patch: Partial<Song>) {
+    if (id === song?.id) return update(patch)
+    const s = await loadSong(id)
+    if (!s) return
+    const next = { ...s, ...patch }
+    await saveSong(next)
+    setSongs(await listSongs())
+    queuePush(next)
+  }
+
+  // Playlist practice: step to the previous / next song of the queue.
+  async function step(dir: 1 | -1, play = player.playing) {
+    if (!queue || !song) return
+    const id = queue.ids[queue.ids.indexOf(song.id) + dir]
+    if (!id) return
+    await open((await loadSong(id))!)
+    if (play) player.play()
+  }
+
+  function practiceList(name: string) {
+    const ids = songs.filter((s) => s.lists?.includes(name)).map((s) => s.id)
+    if (!ids.length) return
+    setQueue({ name, ids })
+    setTab('practice')
+    void loadSong(ids[0]).then(async (s) => {
+      await open(s!)
+      player.play()
+    })
   }
 
   // Re-annotate whenever the lyric text changes.
@@ -275,6 +373,24 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [syncAt, song])
 
+  // Playlist practice moves on to the next song when one ends (a song loop never ends).
+  useEffect(() => {
+    player.onEnd = () => void (queue && step(1, true))
+  })
+
+  // Ctrl+S in the editor saves instead of opening the browser's save-page dialog.
+  useEffect(() => {
+    if (tab !== 'edit') return
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        void saveNow()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
   // Practice page shortcuts: T = tap tempo, Space = play/pause (Space belongs to lyric sync while syncing).
   useEffect(() => {
     if (tab !== 'practice' || syncAt != null) return
@@ -297,6 +413,15 @@ export default function App() {
 
   const hasAudio = TRACKS.some((k) => song.audio[k])
   const allTags = [...new Set(songs.flatMap((s) => s.tags ?? []))].sort()
+  const allLists = [...new Set(songs.flatMap((s) => s.lists ?? []))].sort()
+  const matches = (s: SongMeta) =>
+    !filter ||
+    (filter === 'fav' ? !!s.fav
+    : filter.startsWith('status:') ? s.status === filter.slice(7)
+    : filter.startsWith('list:') ? !!s.lists?.includes(filter.slice(5))
+    : !!s.tags?.includes(filter.slice(4)))
+  const pick = (f: string) => setFilter(filter === f ? null : f)
+  const qPos = queue && queue.ids.indexOf(song.id)
   const tracks = player.source.tracks
   const onlyOriginal = !!tracks.original && !tracks.vocals && !tracks.instrumental
   const canVocal = !!tracks.vocals || (!!tracks.original && (!!tracks.instrumental || tracks.original.numberOfChannels > 1))
@@ -346,12 +471,6 @@ export default function App() {
     } finally {
       setAligning(false)
     }
-  }
-
-  function addTag() {
-    const t = tagDraft.trim()
-    setTagDraft('')
-    if (t && !song!.tags?.includes(t)) update({ tags: [...(song!.tags ?? []), t] })
   }
 
   async function setCover(src: Blob | string) {
@@ -570,13 +689,39 @@ export default function App() {
           <h2>
             我的曲库 <span className="hint">{songs.length} 首</span>
           </h2>
+          <div className="chips tag-filter">
+            <button className={filter == null ? 'on' : ''} onClick={() => setFilter(null)}>
+              全部
+            </button>
+            <button className={filter === 'fav' ? 'on' : ''} onClick={() => pick('fav')}>
+              ★ 收藏
+            </button>
+            {(Object.keys(STATUS) as Status[]).map((k) => (
+              <button key={k} className={filter === `status:${k}` ? 'on' : ''} onClick={() => pick(`status:${k}`)}>
+                {STATUS[k]}
+              </button>
+            ))}
+          </div>
+          {allLists.length > 0 && (
+            <div className="chips tag-filter">
+              <span className="hint">歌单</span>
+              {allLists.map((t) => (
+                <button key={t} className={filter === `list:${t}` ? 'on' : ''} onClick={() => pick(`list:${t}`)}>
+                  {t}
+                </button>
+              ))}
+              {filter?.startsWith('list:') && (
+                <button className="play" onClick={() => practiceList(filter.slice(5))}>
+                  ▶ 按歌单练习
+                </button>
+              )}
+            </div>
+          )}
           {allTags.length > 0 && (
             <div className="chips tag-filter">
-              <button className={tagFilter == null ? 'on' : ''} onClick={() => setTagFilter(null)}>
-                全部
-              </button>
+              <span className="hint">标签</span>
               {allTags.map((t) => (
-                <button key={t} className={tagFilter === t ? 'on' : ''} onClick={() => setTagFilter(tagFilter === t ? null : t)}>
+                <button key={t} className={filter === `tag:${t}` ? 'on' : ''} onClick={() => pick(`tag:${t}`)}>
                   {t}
                 </button>
               ))}
@@ -586,18 +731,35 @@ export default function App() {
             <button className="card new" onClick={() => (open(newSong()), setTab('edit'))}>
               ＋ 新建歌曲
             </button>
-            {songs.filter((s) => !tagFilter || s.tags?.includes(tagFilter)).map((s) => (
-              <button key={s.id} className={`card ${s.id === song.id ? 'current-card' : ''}`} onClick={() => openSaved(s.id)}>
+            {songs.filter(matches).map((s) => (
+              <div
+                key={s.id}
+                role="button"
+                tabIndex={0}
+                className={`card ${s.id === song.id ? 'current-card' : ''}`}
+                onClick={() => (setQueue(null), openSaved(s.id))}
+                onKeyDown={(e) => e.key === 'Enter' && e.target === e.currentTarget && (setQueue(null), openSaved(s.id))}
+              >
+                <button className={`fav ${s.fav ? 'on' : ''}`} title={s.fav ? '取消收藏' : '收藏'} onClick={(e) => (e.stopPropagation(), patchSong(s.id, { fav: !s.fav }))}>
+                  {s.fav ? '★' : '☆'}
+                </button>
                 <span className="card-cover">{s.cover ? <img src={s.cover} alt="" /> : <b lang="ja">{s.title.slice(0, 1)}</b>}</span>
                 <span className="card-title">{s.title}</span>
                 <span className="card-artist">{s.artist || '未填歌手'}</span>
+                <button
+                  className={`status ${s.status ?? ''}`}
+                  title="点击切换：想学 → 正在学 → 已学会"
+                  onClick={(e) => (e.stopPropagation(), patchSong(s.id, { status: nextStatus(s.status) }))}
+                >
+                  {s.status ? STATUS[s.status] : '＋ 学习状态'}
+                </button>
                 <span className="badges">
                   {s.tags?.map((t) => (
                     <i key={t}>{t}</i>
                   ))}
                 </span>
                 <span className="card-date">{new Date(s.updated).toLocaleDateString()}</span>
-              </button>
+              </div>
             ))}
           </div>
         </main>
@@ -612,35 +774,28 @@ export default function App() {
             <label>
               歌手 <input value={song.artist} onChange={(e) => update({ artist: e.target.value })} />
             </label>
-            <div className="tag-edit">
-              标签
-              {song.tags?.map((t) => (
-                <span key={t} className="tag">
-                  {t}
-                  <button className="icon" title="删除标签" onClick={() => update({ tags: song.tags!.filter((x) => x !== t) })}>
-                    ×
-                  </button>
-                </span>
-              ))}
-              <input
-                list="all-tags"
-                placeholder="如 ACG、BanG Dream!，回车添加"
-                value={tagDraft}
-                onChange={(e) => setTagDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  // isComposing: Enter that confirms an IME (pinyin / kana) candidate must not add the tag yet
-                  if (e.nativeEvent.isComposing || (e.key !== 'Enter' && e.key !== ',' && e.key !== '，')) return
-                  e.preventDefault()
-                  addTag()
-                }}
-                onBlur={addTag}
-              />
-              <datalist id="all-tags">
-                {allTags.filter((t) => !song.tags?.includes(t)).map((t) => (
-                  <option key={t} value={t} />
+            <ChipsInput label="标签" values={song.tags} options={allTags} placeholder="如 ACG、BanG Dream!，回车添加" onChange={(tags) => update({ tags })} />
+            <ChipsInput label="歌单" values={song.lists} options={allLists} placeholder="歌单名，回车添加" onChange={(lists) => update({ lists })} />
+            <label>
+              学习状态
+              <select value={song.status ?? ''} onChange={(e) => update({ status: (e.target.value || undefined) as Status | undefined })}>
+                <option value="">未设置</option>
+                {(Object.keys(STATUS) as Status[]).map((k) => (
+                  <option key={k} value={k}>
+                    {STATUS[k]}
+                  </option>
                 ))}
-              </datalist>
-            </div>
+              </select>
+            </label>
+            <button className={song.fav ? 'on' : ''} onClick={() => update({ fav: !song.fav })}>
+              {song.fav ? '★ 已收藏' : '☆ 收藏'}
+            </button>
+            <span className="save">
+              <button className="play" onClick={saveNow}>
+                保存
+              </button>
+              <span className="hint">{savedAt ? `已保存 ${new Date(savedAt).toLocaleTimeString()}` : '修改会自动保存'}</span>
+            </span>
           </div>
 
           <section>
@@ -975,6 +1130,22 @@ export default function App() {
 
       {tab === 'practice' && hasAudio && (
         <div className="row transport no-print">
+          {queue && (
+            <span className="queue">
+              <button className="icon" title="上一首" disabled={!qPos} onClick={() => step(-1)}>
+                ⏮
+              </button>
+              <span className="hint" title="按歌单练习">
+                {queue.name} {qPos! + 1}/{queue.ids.length}
+              </span>
+              <button className="icon" title="下一首" disabled={qPos! + 1 >= queue.ids.length} onClick={() => step(1)}>
+                ⏭
+              </button>
+              <button className="icon" title="退出歌单练习" onClick={() => setQueue(null)}>
+                ×
+              </button>
+            </span>
+          )}
           <button className="play" onClick={() => (player.playing ? player.pause() : player.play())}>
             {player.playing ? '暂停' : '播放'}
           </button>
