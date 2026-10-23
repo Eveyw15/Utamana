@@ -240,5 +240,11 @@ button.icon:hover { background: var(--bg); }
 .tag-filter .hint { margin: 0 2px 0 4px; }
 .tag-filter .play { padding: 4px 14px; }
 .edit .save { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.queue { display: inline-flex; align-items: center; gap: 2px; padding-right: 8px; border-right: 1px solid var(--line); }
+.queue-list { left: 0; transform: none; padding: 8px 6px; min-width: 220px; max-height: 50vh; overflow-y: auto; }
+.queue-head { display: flex; align-items: center; gap: 2px; padding: 0 4px 6px; border-bottom: 1px solid var(--line); }
+.queue-head b { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.queue-list ol { list-style: none; margin: 4px 0 0; padding: 0; }
+.queue-list li { padding: 5px 8px; border-radius: 8px; overflow: hidden; text-overflow: ellipsis; }
+.queue-list li:hover { background: var(--bg); }
+.queue-list li.on { color: var(--accent); font-weight: 600; }
 .card-foot { display: flex; flex-direction: row-reverse; align-items: center; justify-content: space-between; gap: 8px; width: 100%; } /* status left, date right */

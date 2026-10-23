@@ -275,11 +275,10 @@ export default function App() {
     queuePush(next)
   }
 
-  // Playlist practice: step to the previous / next song of the queue.
-  async function step(dir: 1 | -1, play = player.playing) {
-    if (!queue || !song) return
-    const id = queue.ids[queue.ids.indexOf(song.id) + dir]
-    if (!id) return
+  // Playlist practice: go to song number i of the queue.
+  async function goTo(i: number, play = player.playing) {
+    const id = queue?.ids[i]
+    if (!id || id === song?.id) return
     await open((await loadSong(id))!)
     if (play) player.play()
   }
@@ -375,7 +374,7 @@ export default function App() {
 
   // Playlist practice moves on to the next song when one ends (a song loop never ends).
   useEffect(() => {
-    player.onEnd = () => void (queue && step(1, true))
+    player.onEnd = () => void (queue && goTo(queue.ids.indexOf(song!.id) + 1, true))
   })
 
   // Ctrl+S in the editor saves instead of opening the browser's save-page dialog.
@@ -1133,20 +1132,30 @@ export default function App() {
       {tab === 'practice' && hasAudio && (
         <div className="row transport no-print">
           {queue && (
-            <span className="queue">
-              <button className="icon" title="上一首" disabled={!qPos} onClick={() => step(-1)}>
-                ⏮
-              </button>
-              <span className="hint" title="按歌单练习">
-                {queue.name} {qPos! + 1}/{queue.ids.length}
-              </span>
-              <button className="icon" title="下一首" disabled={qPos! + 1 >= queue.ids.length} onClick={() => step(1)}>
-                ⏭
-              </button>
-              <button className="icon" title="退出歌单练习" onClick={() => setQueue(null)}>
-                ×
-              </button>
-            </span>
+            <div className="pop queue" tabIndex={0} title="按歌单练习">
+              ☰ {qPos! + 1}/{queue.ids.length}
+              <div className="pop-bar queue-list">
+                <div className="queue-head">
+                  <b>{queue.name}</b>
+                  <button className="icon" title="上一首" disabled={!qPos} onClick={() => goTo(qPos! - 1)}>
+                    ⏮
+                  </button>
+                  <button className="icon" title="下一首" disabled={qPos! + 1 >= queue.ids.length} onClick={() => goTo(qPos! + 1)}>
+                    ⏭
+                  </button>
+                  <button className="icon" title="退出歌单练习" onClick={() => setQueue(null)}>
+                    ×
+                  </button>
+                </div>
+                <ol>
+                  {queue.ids.map((id, i) => (
+                    <li key={id} className={i === qPos ? 'on' : ''} onClick={() => goTo(i)}>
+                      {songs.find((x) => x.id === id)?.title ?? '（已删除）'}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </div>
           )}
           <button className="play" onClick={() => (player.playing ? player.pause() : player.play())}>
             {player.playing ? '暂停' : '播放'}
