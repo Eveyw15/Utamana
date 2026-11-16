@@ -1,5 +1,5 @@
-// POST /api/translate {lines: string[]} -> string[], one translation per line.
-// Runs as a Vercel function in production; vite.config.ts reuses translateLines for the dev server.
+// Japanese -> Chinese, one translation per line. Called from the browser: Google allows CORS here,
+// and rate-limits (429) datacenter IPs such as Vercel's, so a server proxy fails in production.
 
 // shortcut: unofficial Google Translate endpoint (no key), may break or rate-limit; swap for a keyed API if it does.
 async function googleTranslate(text: string) {
@@ -17,14 +17,4 @@ export async function translateLines(lines: string[]) {
   const out = (await googleTranslate(lines.join('\n'))).split('\n').map((s) => s.trim())
   // Google occasionally merges lines; fall back to one request per line so rows stay aligned.
   return out.length === lines.length ? out : Promise.all(lines.map((l) => googleTranslate(l)))
-}
-
-export async function POST(req: Request) {
-  try {
-    const { lines } = (await req.json()) as { lines: string[] }
-    if (!Array.isArray(lines) || lines.length > 500) return new Response('bad lines', { status: 400 })
-    return Response.json(await translateLines(lines.map(String)))
-  } catch (e) {
-    return new Response(String(e), { status: 502 })
-  }
 }

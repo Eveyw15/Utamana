@@ -1,30 +1,14 @@
 import react from '@vitejs/plugin-react'
 import { spawn } from 'node:child_process'
 import { defineConfig, type Plugin } from 'vite'
-import { translateLines } from './api/translate.ts'
 
 // Local API for the dev server.
-// shortcut: /api/audio only works under `npm run dev` / `npm run preview` (needs local yt-dlp); /api/translate is also a Vercel function.
+// shortcut: only works under `npm run dev` / `npm run preview` (needs local yt-dlp), a static build has no server.
 
 // GET /api/audio?url=... downloads the audio track of a Bilibili/YouTube video with yt-dlp (must be on PATH).
 function localApi(): Plugin {
   const handler = (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse, next: () => void) => {
     const u = new URL(req.url ?? '', 'http://x')
-    if (u.pathname === '/api/translate' && req.method === 'POST') {
-      let body = ''
-      req.on('data', (c: Buffer) => (body += c))
-      req.on('end', async () => {
-        try {
-          const { lines } = JSON.parse(body) as { lines: string[] }
-          res.setHeader('Content-Type', 'application/json')
-          res.end(JSON.stringify(await translateLines(lines)))
-        } catch (e) {
-          res.statusCode = 502
-          res.end(String(e))
-        }
-      })
-      return
-    }
     if (u.pathname !== '/api/audio') return next()
     const target = u.searchParams.get('url') ?? ''
     const fail = (code: number, msg: string) => {

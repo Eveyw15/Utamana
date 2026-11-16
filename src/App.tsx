@@ -5,6 +5,7 @@ import { Player, TRACK_LABEL, type TrackKey } from './player'
 import { alignTimes } from './align'
 import { searchCovers, toCover, type CoverHit } from './cover'
 import { CLICK_LABEL, anchorFirst, beatGrid, parseSections, snapToBeat, tapFit, type ClickSound, type Section } from './beat'
+import { translateLines } from './translate'
 import { FONTS, applyFonts, loadFonts, type FontSettings } from './fonts'
 import { deleteRemote, pushSong, supabase, syncAll } from './cloud'
 import { deleteSong, listSongs, loadSong, saveSong, type Song, type SongMeta } from './db'
@@ -523,9 +524,7 @@ export default function App() {
     try {
       // Drop 漢字{よみ} overrides so the translator sees plain lyrics.
       const lines = song!.lines.filter((l) => l.text).map((l) => l.text.replace(/{[^}]*}/g, ''))
-      const res = await fetch('/api/translate', { method: 'POST', body: JSON.stringify({ lines }) })
-      if (!res.ok) return alert(`翻译失败：${await res.text()}`)
-      await update({ trans: await res.json() })
+      await update({ trans: await translateLines(lines) })
     } catch (e) {
       alert(`翻译失败：${e}`)
     } finally {
