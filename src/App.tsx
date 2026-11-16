@@ -669,6 +669,18 @@ export default function App() {
               <FontPicker label="界面字体" value={fonts.ui} onChange={(ui) => setFonts({ ...fonts, ui })} />
               <FontPicker label="歌词字体" value={fonts.lyric} onChange={(lyric) => setFonts({ ...fonts, lyric })} />
             </div>
+            <div className="row">
+              <label>
+                界面大小
+                <input type="range" min={0.8} max={1.5} step={0.05} value={fonts.uiScale} onChange={(e) => setFonts({ ...fonts, uiScale: +e.target.value })} />
+                <span className="time">{Math.round(fonts.uiScale * 100)}%</span>
+              </label>
+              <label>
+                歌词字号
+                <input type="range" min={14} max={40} value={fonts.lyricSize} onChange={(e) => setFonts({ ...fonts, lyricSize: +e.target.value })} />
+                <span className="time">{fonts.lyricSize}px</span>
+              </label>
+            </div>
             <p className="jp preview" lang="ja">
               <ruby>
                 明日<rt>あした</rt>
@@ -828,12 +840,15 @@ export default function App() {
           <section>
             <h2>音频</h2>
             <p className="hint">用 MISST / UVR 分离出人声和伴奏后分别上传，练习页可以调人声音量。只有原曲也可以。</p>
-            <div className="row">
-              <input className="grow" placeholder="粘贴 B站 / YouTube 链接，导入为原曲" value={link} onChange={(e) => setLink(e.target.value)} />
-              <button disabled={!link.trim() || fetching} onClick={importLink}>
-                {fetching ? '下载中…' : '从链接导入'}
-              </button>
-            </div>
+            {/* Link import needs local yt-dlp behind the dev server, so the deployed build hides it. */}
+            {import.meta.env.DEV && (
+              <div className="row">
+                <input className="grow" placeholder="粘贴 B站 / YouTube 链接，导入为原曲" value={link} onChange={(e) => setLink(e.target.value)} />
+                <button disabled={!link.trim() || fetching} onClick={importLink}>
+                  {fetching ? '下载中…' : '从链接导入'}
+                </button>
+              </div>
+            )}
             {TRACKS.map((k) => (
               <div className="row" key={k}>
                 <span className="track">{TRACK_LABEL[k]}</span>

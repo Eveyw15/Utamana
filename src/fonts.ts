@@ -13,15 +13,18 @@ export const FONTS: { label: string; css: string }[] = [
   { label: '明朝 Noto Serif', css: "'Noto Serif JP', serif" },
 ]
 
-export type FontSettings = { ui: string; lyric: string } // a FONTS css value, or the name of a locally installed font
+// ui/lyric: a FONTS css value, or the name of a locally installed font. uiScale: whole-page zoom; lyricSize: lyric px.
+export type FontSettings = { ui: string; lyric: string; uiScale: number; lyricSize: number }
 
 const KEY = 'utamana:fonts'
 
+const DEFAULTS: FontSettings = { ui: DEFAULT_STACK, lyric: DEFAULT_STACK, uiScale: 1, lyricSize: 21 }
+
 export function loadFonts(): FontSettings {
   try {
-    return { ui: DEFAULT_STACK, lyric: DEFAULT_STACK, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') }
+    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') }
   } catch {
-    return { ui: DEFAULT_STACK, lyric: DEFAULT_STACK }
+    return DEFAULTS
   }
 }
 
@@ -32,6 +35,8 @@ export const toCss = (v: string) =>
 export function applyFonts(s: FontSettings) {
   document.documentElement.style.setProperty('--ui-font', s.ui === DEFAULT_STACK ? UI_STACK : toCss(s.ui))
   document.documentElement.style.setProperty('--lyric-font', toCss(s.lyric))
+  document.documentElement.style.setProperty('--lyric-size', `${s.lyricSize}px`)
+  document.documentElement.style.zoom = String(s.uiScale)
   try {
     localStorage.setItem(KEY, JSON.stringify(s))
   } catch {
