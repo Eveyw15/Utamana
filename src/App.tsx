@@ -672,8 +672,14 @@ export default function App() {
             <div className="row">
               <label>
                 界面大小
-                <input type="range" min={0.8} max={1.5} step={0.05} value={fonts.uiScale} onChange={(e) => setFonts({ ...fonts, uiScale: +e.target.value })} />
-                <span className="time">{Math.round(fonts.uiScale * 100)}%</span>
+                {/* A dropdown, not a slider: zoom rescales the page, so a slider would move away from the cursor mid-drag. */}
+                <select value={fonts.uiScale} onChange={(e) => setFonts({ ...fonts, uiScale: +e.target.value })}>
+                  {[0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5].map((v) => (
+                    <option key={v} value={v}>
+                      {Math.round(v * 100)}%
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 歌词字号
