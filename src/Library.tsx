@@ -1,8 +1,9 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { Art } from './Art'
 import { ChipsPicker } from './ChipsPicker'
+import { PlaylistEditor } from './PlaylistEditor'
 import type { Song, SongMeta } from './db'
-import { DEFAULT_ROWS, ROW_LABEL, STATUS, ago, buildRows, loadOpened, loadRowOrder, nextStatus, saveRowOrder, type RowKey } from './rows'
+import { STATUS, ago, buildRows, loadOpened, loadRowPrefs, nextStatus, rowChoices, rowLabel, saveRowPrefs, type Row } from './rows'
 
 type Props = {
   songs: SongMeta[]
@@ -13,6 +14,7 @@ type Props = {
   onPatch: (id: string, patch: Partial<Song>) => void
   onDelete: (id: string) => void
   onPracticeList: (name: string) => void
+  onSavePlaylist: (old: string | null, name: string, ids: string[]) => void
   onHover: (s: SongMeta | null) => void
 }
 
@@ -24,14 +26,15 @@ const STAR = (
 
 // The library: one horizontally scrolling row of records per group (在学, 最近播放, ...), in an order the user
 // can rearrange. A playlist / tag chip swaps the rows for a single grid of the matching songs.
-export function Library({ songs, currentId, onOpen, onEdit, onNew, onPatch, onDelete, onPracticeList, onHover }: Props) {
-  const [order, setOrder] = useState<RowKey[]>(loadRowOrder)
+export function Library({ songs, currentId, onOpen, onEdit, onNew, onPatch, onDelete, onPracticeList, onSavePlaylist, onHover }: Props) {
+  const [prefs, setPrefs] = useState(loadRowPrefs) // row order and the rows the user hid
   const [opened] = useState(loadOpened)
   const [sorting, setSorting] = useState(false)
   const [picked, setFilter] = useState<string | null>(null) // 'list:<name>' or 'tag:<name>'
   const [menu, setMenu] = useState<string | null>(null) // song id whose ⋯ menu is open
   const [listsFor, setListsFor] = useState<string | null>(null) // song id whose playlist picker is open
-  const [drag, setDrag] = useState<RowKey | null>(null)
+  const [drag, setDrag] = useState<Row | null>(null)
+  const [playlist, setPlaylist] = useState<string | null | undefined>(undefined) // editor: undefined closed, null new, name editing
 
   useEffect(() => {
     const close = () => (setMenu(null), setListsFor(null))
@@ -39,22 +42,27 @@ export function Library({ songs, currentId, onOpen, onEdit, onNew, onPatch, onDe
     return () => removeEventListener('click', close)
   }, [])
 
-  const keys = [...order.filter((k) => k in ROW_LABEL), ...DEFAULT_ROWS.filter((k) => !order.includes(k))]
-  const rows = buildRows(songs, opened, keys)
+  const keys = rowChoices(songs, prefs.order) // every row that could be shown, in the user's order
+  const rows = buildRows(songs, opened, keys, prefs.hidden)
   const allLists = [...new Set(songs.flatMap((s) => s.lists ?? []))].sort()
   const allTags = [...new Set(songs.flatMap((s) => s.tags ?? []))].sort()
   // A playlist / tag that no longer exists (its last song left it) drops the filter.
   const filter = picked && (picked.startsWith('list:') ? allLists.includes(picked.slice(5)) : allTags.includes(picked.slice(4))) ? picked : null
   const filtered = filter && songs.filter((s) => (filter.startsWith('list:') ? s.lists?.includes(filter.slice(5)) : s.tags?.includes(filter.slice(4))))
 
-  function move(keys: RowKey[], from: RowKey, to: RowKey) {
+  function savePrefs(next: typeof prefs) {
+    setPrefs(next)
+    saveRowPrefs(next)
+  }
+  function move(from: Row, to: Row) {
     const next = keys.filter((k) => k !== from)
     next.splice(next.indexOf(to) + (keys.indexOf(from) < keys.indexOf(to) ? 1 : 0), 0, from)
-    setOrder(next)
-    saveRowOrder(next)
+    savePrefs({ ...prefs, order: next })
   }
+  const toggle = (k: Row) => savePrefs({ ...prefs, hidden: prefs.hidden.includes(k) ? prefs.hidden.filter((x) => x !== k) : [...prefs.hidden, k] })
+  const count = (k: Row) => buildRows(songs, opened, [k]).find((r) => r.key === k)?.songs.length ?? 0
 
-  const card = (s: SongMeta, row?: RowKey, i = 0) => (
+  const card = (s: SongMeta, row?: Row, i = 0) => (
     <div
       key={s.id}
       className={`rec ${s.id === currentId ? 'current' : ''}`}
@@ -118,15 +126,29 @@ export function Library({ songs, currentId, onOpen, onEdit, onNew, onPatch, onDe
 
   return (
     <main className="library-page no-print">
+      {playlist !== undefined && (
+        <PlaylistEditor
+          songs={songs}
+          name={playlist ?? undefined}
+          taken={allLists}
+          onClose={() => setPlaylist(undefined)}
+          onSave={(name, ids) => {
+            onSavePlaylist(playlist, name, ids)
+            setPlaylist(undefined)
+            setFilter(`list:${name}`)
+          }}
+        />
+      )}
       <div className="lib-head">
         <h1>曲库</h1>
         <span className="hint">{songs.length} 首</span>
         <span className="grow" />
         {songs.length > 0 && !filter && (
           <button className={sorting ? 'primary' : ''} onClick={() => setSorting(!sorting)}>
-            {sorting ? '完成' : '调整顺序'}
+            {sorting ? '完成' : '编辑分组'}
           </button>
         )}
+        <button onClick={() => setPlaylist(null)}>＋ 新歌单</button>
         <button className="primary" onClick={onNew}>
           ＋ 新歌曲
         </button>
@@ -161,44 +183,60 @@ export function Library({ songs, currentId, onOpen, onEdit, onNew, onPatch, onDe
           <div className="row-head">
             <h2>{filter!.slice(filter!.indexOf(':') + 1)}</h2>
             <span className="hint">{filtered.length}</span>
-            {filter!.startsWith('list:') && filtered.length > 0 && (
-              <button className="primary" onClick={() => onPracticeList(filter!.slice(5))}>
-                ▶ 按歌单练习
-              </button>
+            {filter!.startsWith('list:') && (
+              <>
+                <button className="edit-list" onClick={() => setPlaylist(filter!.slice(5))}>
+                  编辑歌单
+                </button>
+                {filtered.length > 0 && (
+                  <button className="primary" onClick={() => onPracticeList(filter!.slice(5))}>
+                    ▶ 按歌单练习
+                  </button>
+                )}
+              </>
             )}
           </div>
           <div className="lib-grid">{filtered.map((s, i) => card(s, undefined, i))}</div>
         </section>
       ) : sorting ? (
         <div className="sorting">
-          {rows.map((r, i) => (
-            <div
-              key={r.key}
-              className={`sort-bar ${drag === r.key ? 'dragging' : ''}`}
-              draggable
-              onDragStart={() => setDrag(r.key)}
-              onDragEnd={() => setDrag(null)}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => drag && drag !== r.key && move(keys, drag, r.key)}
-            >
-              <span className="grip">⋮⋮</span>
-              <b>{ROW_LABEL[r.key]}</b>
-              <span className="hint">{r.songs.length}</span>
-              <span className="grow" />
-              <button disabled={!i} onClick={() => move(keys, r.key, rows[i - 1].key)}>
-                ↑
-              </button>
-              <button disabled={i === rows.length - 1} onClick={() => move(keys, r.key, rows[i + 1].key)}>
-                ↓
-              </button>
-            </div>
-          ))}
+          <p className="hint">拖动或用 ↑↓ 调整顺序，点眼睛显示或隐藏这一行。歌单（☰）和标签（#）也可以加成一行。</p>
+          {keys.map((k, i) => {
+            const off = prefs.hidden.includes(k)
+            return (
+              <div
+                key={k}
+                className={`sort-bar ${drag === k ? 'dragging' : ''} ${off ? 'off' : ''}`}
+                draggable
+                onDragStart={() => setDrag(k)}
+                onDragEnd={() => setDrag(null)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => drag && drag !== k && move(drag, k)}
+              >
+                <span className="grip">⋮⋮</span>
+                <b>{rowLabel(k)}</b>
+                <span className="hint">{count(k)}</span>
+                <span className="grow" />
+                <button className={`eye ${off ? '' : 'on'}`} title={off ? '显示这一行' : '隐藏这一行'} aria-pressed={!off} onClick={() => toggle(k)}>
+                  {off ? '隐藏' : '显示'}
+                </button>
+                <button disabled={!i} onClick={() => move(k, keys[i - 1])}>
+                  ↑
+                </button>
+                <button disabled={i === keys.length - 1} onClick={() => move(k, keys[i + 1])}>
+                  ↓
+                </button>
+              </div>
+            )
+          })}
         </div>
+      ) : songs.length > 0 && !rows.length ? (
+        <p className="hint lib-empty">所有分组都隐藏了，点「编辑分组」打开。</p>
       ) : (
         rows.map((r) => (
           <section key={r.key} className="lib-row">
             <div className="row-head">
-              <h2>{ROW_LABEL[r.key]}</h2>
+              <h2>{rowLabel(r.key)}</h2>
               <span className="hint">{r.songs.length}</span>
             </div>
             <div className="shelf">{r.songs.map((s, i) => card(s, r.key, i))}</div>
