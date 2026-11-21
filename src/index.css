@@ -449,3 +449,46 @@ button:active:not(:disabled) { transform: scale(.96); }
 .auth-card .primary:disabled { opacity: .5; }
 .auth-card .link { justify-self: center; color: #8a807d; }
 @media (prefers-reduced-motion: reduce) { .auth-bg i { animation: none; } }
+.password-form { display: grid; gap: 8px; width: min(340px, 100%); flex-basis: 100%; margin-top: 6px; }
+.password-form input { width: 100%; padding: 8px 14px; }
+.auth-card .password-form { width: 100%; }
+/* Group editor: shown rows left, hidden rows right; drag within or across, or tick the box. */
+.sorting { max-width: 980px; }
+.sort-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.sort-col { display: grid; gap: 8px; align-content: start; min-height: 120px; padding: 10px; border-radius: 16px; background: rgba(0, 0, 0, .14); border: 1.5px dashed transparent; transition: border-color .2s; }
+.sort-col.droppable { border-color: var(--line); }
+.sort-col h4 { margin: 0 4px 2px; font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .08em; }
+.drop-hint { text-align: center; padding: 18px 0; }
+.check { position: relative; display: inline-grid; place-items: center; width: 20px; height: 20px; flex: none; cursor: pointer; }
+.check input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.check i { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid rgba(255, 255, 255, .7); transition: background .15s; }
+.check input:checked + i { background: #fff; }
+.check input:checked + i::after { content: ''; display: block; width: 5px; height: 9px; margin: 2px 0 0 5.5px; border: solid #222; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.check input:focus-visible + i { outline: 2px solid rgba(255, 255, 255, .5); outline-offset: 2px; }
+@media (max-width: 900px) { .sort-cols { grid-template-columns: 1fr; } }
+/* Profile */
+.avatar { display: inline-grid; place-items: center; flex: none; border-radius: 50%; overflow: hidden; background: #9fb0bf; color: #fff; font-weight: 700; line-height: 1; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.avatar-btn { padding: 0; border: 0; background: none !important; border-radius: 50%; display: grid; }
+.avatar-btn.on .avatar, .avatar-btn:hover .avatar { outline: 2px solid rgba(255, 255, 255, .8); outline-offset: 2px; }
+.profile-page { max-width: 760px; margin: 0 auto; padding: 8px var(--pad) 60px; display: grid; gap: 18px; width: 100%; }
+.profile-page h2 { font-size: 15px; margin-bottom: 12px; }
+.profile-head { display: flex; align-items: center; gap: 22px; }
+.avatar-pick { position: relative; display: grid; cursor: pointer; border-radius: 50%; }
+.avatar-pick > span:not(.avatar) { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 50%; font-size: 12px; background: rgba(0, 0, 0, .45); opacity: 0; transition: opacity .2s; }
+.avatar-pick:hover > span:not(.avatar) { opacity: 1; }
+.profile-name { flex: 1; min-width: 0; display: grid; gap: 6px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.tile { display: grid; gap: 2px; padding: 12px 14px; border-radius: 12px; background: rgba(0, 0, 0, .14); }
+.tile b { font-size: 20px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tile span { font-size: 12px; color: var(--muted); }
+.week-chart { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; height: 120px; margin: 16px 0 6px; align-items: end; }
+.week-chart > div { height: 100%; display: grid; grid-template-rows: 1fr auto; justify-items: center; gap: 4px; }
+.week-chart i { align-self: end; width: 60%; max-width: 28px; border-radius: 6px 6px 2px 2px; background: rgba(255, 255, 255, .85); }
+.week-chart i.none { background: rgba(255, 255, 255, .18); }
+.week-chart span { font-size: 11px; color: var(--muted); }
+/* Volume / karaoke chips: outlined like the other bar buttons; their pop-up centres the slider under the value. */
+.transport .pop { display: grid; place-items: center; width: 34px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 999px; background: var(--glass); font-size: 14px; }
+.transport .pop:hover, .transport .pop:focus-within { background: rgba(255, 255, 255, .18); }
+.pop-bar { display: flex; flex-direction: column; align-items: center; }
+.pop-bar output { margin-bottom: 8px; }

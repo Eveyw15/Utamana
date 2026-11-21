@@ -18,6 +18,9 @@ import { ChipsPicker } from './ChipsPicker'
 import { Library } from './Library'
 import { NewSong } from './NewSong'
 import { AuthPage } from './AuthPage'
+import { PasswordForm } from './PasswordForm'
+import { Avatar, Profile, type ProfileInfo } from './Profile'
+import { logPractice } from './practice'
 
 const player = new Player()
 const TRACKS: TrackKey[] = ['original', 'vocals', 'instrumental']
@@ -102,7 +105,14 @@ function FontPicker({ label, value, onChange }: { label: string; value: string; 
 export default function App() {
   const [songs, setSongs] = useState<SongMeta[]>([])
   const [song, setSong] = useState<Song | null>(null)
-  const [tab, setTab] = useState<'library' | 'practice' | 'settings' | 'new'>('library')
+  const [tab, setTab] = useState<'library' | 'practice' | 'settings' | 'new' | 'profile'>('library')
+  const [profile, setProfile] = useState<ProfileInfo>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('utamana:profile') ?? '{}')
+    } catch {
+      return {}
+    }
+  })
   const [editing, setEditing] = useState(false) // practice page switched to edit mode
   const [editTab, setEditTab] = useState<'lyrics' | 'trans' | 'audio'>('lyrics')
   const [coverPop, setCoverPop] = useState(false)
@@ -136,6 +146,8 @@ export default function App() {
   const [fonts, setFonts] = useState<FontSettings>(loadFonts)
   const [user, setUser] = useState<string | null>(null) // signed-in email
   const [authReady, setAuthReady] = useState(!supabase) // the saved session (if any) has been read
+  const [recovery, setRecovery] = useState(false) // signed in by a reset-password link: ask for a new password
+  const [pwOpen, setPwOpen] = useState(false) // settings: change-password form shown
   // The sign-in page shows until the first sign-in on this device, unless the user chose to stay local.
   const [localOnly, setLocalOnly] = useState(() => {
     try {
@@ -174,7 +186,10 @@ export default function App() {
   useEffect(() => {
     if (!supabase) return
     supabase.auth.getSession().then(({ data }) => (setUser(data.session?.user.email ?? null), setAuthReady(true)))
-    const { data } = supabase.auth.onAuthStateChange((_, s) => setUser(s?.user.email ?? null))
+    const { data } = supabase.auth.onAuthStateChange((event, s) => {
+      setUser(s?.user.email ?? null)
+      if (event === 'PASSWORD_RECOVERY') setRecovery(true) // came back from a reset-password email
+    })
     return () => data.subscription.unsubscribe()
   }, [])
 
@@ -383,6 +398,34 @@ export default function App() {
     }
   }, [song?.lines.map((l) => l.text).join('\n')])
 
+  // Practice time for the profile page: count playback in 5 s steps (local only).
+  useEffect(() => {
+    const id = setInterval(() => player.playing && logPractice(5), 5000)
+    return () => clearInterval(id)
+  }, [])
+
+  // Nickname / avatar: the signed-in account's metadata wins (so it follows you between devices).
+  useEffect(() => {
+    if (!supabase || !user) return
+    supabase.auth.getUser().then(({ data }) => {
+      const m = data.user?.user_metadata as ProfileInfo | undefined
+      if (m?.nickname || m?.avatar) setProfile({ nickname: m.nickname, avatar: m.avatar })
+    })
+  }, [user])
+
+  async function saveProfile(p: ProfileInfo) {
+    setProfile(p)
+    try {
+      localStorage.setItem('utamana:profile', JSON.stringify(p))
+    } catch {
+      // Storage blocked: kept for this visit (and in the account when signed in).
+    }
+    if (supabase && user) {
+      const { error } = await supabase.auth.updateUser({ data: { nickname: p.nickname ?? null, avatar: p.avatar ?? null } })
+      if (error) alert(`资料保存到账号失败：${error.message}`)
+    }
+  }
+
   // Playhead polling on a timer that always runs (not tied to a play re-render or to rAF, which can stall),
   // so the bar follows playback however it was started.
   useEffect(() => {
@@ -486,6 +529,12 @@ export default function App() {
   })
 
   if (!authReady || !song) return <p className="loading">加载中…</p>
+  if (supabase && recovery)
+    return (
+      <div className="app auth-screen">
+        <AuthPage supabase={supabase} onSkip={() => setRecovery(false)} recovery onRecovered={() => setTimeout(() => setRecovery(false), 800)} />
+      </div>
+    )
   if (supabase && !user && !localOnly)
     return (
       <div className="app auth-screen">
@@ -1246,12 +1295,17 @@ export default function App() {
             {{ idle: '已同步', syncing: '同步中…', error: `同步失败：${syncError}` }[syncState]}
           </span>
         )}
+        <button className={`avatar-btn ${tab === 'profile' ? 'on' : ''}`} title="个人主页" onClick={() => goTab(tab === 'profile' ? 'library' : 'profile')}>
+          <Avatar profile={profile} email={user} />
+        </button>
         <button className={`chip ${tab === 'settings' ? 'on' : ''}`} title="设置" onClick={() => goTab(tab === 'settings' ? 'library' : 'settings')}>
           设置
         </button>
       </header>
 
       {dictError && <p className="error no-print">词典加载失败：{dictError}</p>}
+
+      {tab === 'profile' && <Profile songs={songs} email={user} profile={profile} onSave={saveProfile} onSettings={() => goTab('settings')} />}
 
       {tab === 'settings' && (
         <main className="settings-page no-print">
@@ -1266,7 +1320,11 @@ export default function App() {
                   <button disabled={syncState === 'syncing'} onClick={runSync}>
                     立即同步
                   </button>
+                  <button className={pwOpen ? 'on' : ''} onClick={() => setPwOpen(!pwOpen)}>
+                    修改密码
+                  </button>
                   <button onClick={() => supabase!.auth.signOut()}>退出</button>
+                  {pwOpen && <PasswordForm supabase={supabase} onDone={() => setTimeout(() => setPwOpen(false), 1200)} />}
                 </>
               ) : (
                 <>
@@ -1299,7 +1357,7 @@ export default function App() {
               <input type="range" min={14} max={40} value={fonts.lyricSize} onChange={(e) => setFonts({ ...fonts, lyricSize: +e.target.value })} />
             </div>
             <div className="sec-title">
-              唱到的那句歌词弹一下
+              歌词特效
               <label className="switch" title="开关">
                 <input type="checkbox" checked={fonts.bounce} onChange={(e) => setFonts({ ...fonts, bounce: e.target.checked })} />
                 <i />

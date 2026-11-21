@@ -60,6 +60,16 @@ export function Library({ songs, currentId, onOpen, onEdit, onNew, onPatch, onDe
     savePrefs({ ...prefs, order: next })
   }
   const toggle = (k: Row) => savePrefs({ ...prefs, hidden: prefs.hidden.includes(k) ? prefs.hidden.filter((x) => x !== k) : [...prefs.hidden, k] })
+  // Drop k before `target`, or at the end of the shown / hidden column, and show or hide it to match.
+  function place(k: Row, target: Row | null, show: boolean) {
+    const order = keys.filter((x) => x !== k)
+    const lastShown = order.reduce((at, x, i) => (prefs.hidden.includes(x) ? at : i), -1)
+    order.splice(target ? order.indexOf(target) : show ? lastShown + 1 : order.length, 0, k)
+    const hidden = prefs.hidden.filter((x) => x !== k)
+    savePrefs({ order, hidden: show ? hidden : [...hidden, k] })
+  }
+  const shownKeys = keys.filter((k) => !prefs.hidden.includes(k))
+  const hiddenKeys = keys.filter((k) => prefs.hidden.includes(k))
   const count = (k: Row) => buildRows(songs, opened, [k]).find((r) => r.key === k)?.songs.length ?? 0
 
   const card = (s: SongMeta, row?: Row, i = 0) => (
@@ -200,35 +210,54 @@ export function Library({ songs, currentId, onOpen, onEdit, onNew, onPatch, onDe
         </section>
       ) : sorting ? (
         <div className="sorting">
-          <p className="hint">拖动或用 ↑↓ 调整顺序，点眼睛显示或隐藏这一行。歌单（☰）和标签（#）也可以加成一行。</p>
-          {keys.map((k, i) => {
-            const off = prefs.hidden.includes(k)
-            return (
-              <div
-                key={k}
-                className={`sort-bar ${drag === k ? 'dragging' : ''} ${off ? 'off' : ''}`}
-                draggable
-                onDragStart={() => setDrag(k)}
-                onDragEnd={() => setDrag(null)}
+          <p className="hint">左边是显示的分组，右边是不显示的。拖动可以排序，也可以拖到另一边；勾选框打勾就是显示。歌单（☰）和标签（#）也能当分组。</p>
+          <div className="sort-cols">
+            {([true, false] as const).map((show) => (
+              <section
+                key={String(show)}
+                className={`sort-col ${drag ? 'droppable' : ''}`}
                 onDragOver={(e) => e.preventDefault()}
-                onDrop={() => drag && drag !== k && move(drag, k)}
+                onDrop={() => drag && place(drag, null, show)}
               >
-                <span className="grip">⋮⋮</span>
-                <b>{rowLabel(k)}</b>
-                <span className="hint">{count(k)}</span>
-                <span className="grow" />
-                <button className={`eye ${off ? '' : 'on'}`} title={off ? '显示这一行' : '隐藏这一行'} aria-pressed={!off} onClick={() => toggle(k)}>
-                  {off ? '隐藏' : '显示'}
-                </button>
-                <button disabled={!i} onClick={() => move(k, keys[i - 1])}>
-                  ↑
-                </button>
-                <button disabled={i === keys.length - 1} onClick={() => move(k, keys[i + 1])}>
-                  ↓
-                </button>
-              </div>
-            )
-          })}
+                <h4>{show ? `显示 · ${shownKeys.length}` : `不显示 · ${hiddenKeys.length}`}</h4>
+                {(show ? shownKeys : hiddenKeys).map((k, i, list) => (
+                  <div
+                    key={k}
+                    className={`sort-bar ${drag === k ? 'dragging' : ''} ${show ? '' : 'off'}`}
+                    draggable
+                    onDragStart={() => setDrag(k)}
+                    onDragEnd={() => setDrag(null)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.stopPropagation()
+                      if (drag && drag !== k) place(drag, k, show)
+                      setDrag(null)
+                    }}
+                  >
+                    <label className="check" title={show ? '取消勾选就不显示' : '勾选就显示'}>
+                      <input type="checkbox" checked={show} onChange={() => toggle(k)} />
+                      <i />
+                    </label>
+                    <span className="grip">⋮⋮</span>
+                    <b>{rowLabel(k)}</b>
+                    <span className="hint">{count(k)}</span>
+                    <span className="grow" />
+                    {show && (
+                      <>
+                        <button disabled={!i} title="上移" onClick={() => move(k, list[i - 1])}>
+                          ↑
+                        </button>
+                        <button disabled={i === list.length - 1} title="下移" onClick={() => move(k, list[i + 1])}>
+                          ↓
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
+                {!(show ? shownKeys : hiddenKeys).length && <p className="hint drop-hint">拖到这里</p>}
+              </section>
+            ))}
+          </div>
         </div>
       ) : songs.length > 0 && !rows.length ? (
         <p className="hint lib-empty">所有分组都隐藏了，点「编辑分组」打开。</p>

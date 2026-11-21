@@ -14,13 +14,13 @@ export async function searchCovers(term: string): Promise<CoverHit[]> {
     .map((r) => ({ title: r.trackName, artist: r.artistName, album: r.collectionName, url: r.artworkUrl100!.replace('100x100bb', '600x600bb') }))
 }
 
-// Square-crop and shrink to 300 px (~40 KB).
-export async function toCover(src: Blob | string) {
+// Square-crop and shrink to `size` px (300 px is ~40 KB; avatars use 128).
+export async function toCover(src: Blob | string, size = 300) {
   const blob = typeof src === 'string' ? await (await fetch(src)).blob() : src
   const img = await createImageBitmap(blob)
   const side = Math.min(img.width, img.height)
-  const canvas = Object.assign(document.createElement('canvas'), { width: 300, height: 300 })
-  canvas.getContext('2d')!.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, 300, 300)
+  const canvas = Object.assign(document.createElement('canvas'), { width: size, height: size })
+  canvas.getContext('2d')!.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size)
   return canvas.toDataURL('image/jpeg', 0.8)
 }
 
