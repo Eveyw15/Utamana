@@ -90,7 +90,7 @@ export async function publish(song: Song, author: Author, duration?: number): Pr
     p_track_id: song.trackId ?? null,
     p_search: search,
     p_data: postData(song),
-    p_tracks: {},
+    p_tracks: null, // first call keeps an existing post's tracks (null = unchanged) until the new files are up
     p_duration: duration ?? null,
     p_author_name: author.name ?? null,
     p_author_avatar: author.avatar ?? null,
@@ -161,7 +161,7 @@ export async function copyToLibrary(post: Pick<Post, 'id' | 'data' | 'tracks'>):
   for (const [k, path] of Object.entries(song.audioSrc ?? {}) as [TrackKey, string][])
     song.audio[k] = check(await supabase!.storage.from('community').download(path)).data!
   await saveSong(song)
-  void supabase!.rpc('count_copy', { p_post: post.id })
+  await supabase!.rpc('count_copy', { p_post: post.id }) // a builder only sends when awaited; a failed count is not worth an error
   return song
 }
 

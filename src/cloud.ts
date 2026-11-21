@@ -55,7 +55,11 @@ async function pullSong(uid: string, id: string, local?: Song): Promise<Song> {
   for (const k of Object.keys(d.audio) as TrackKey[]) {
     // Reuse the local file when the track has not changed.
     if (local?.audio[k] && (local.audioRev?.[k] ?? 0) === d.audio[k]) audio[k] = local.audio[k]
-    else if (d.audioSrc?.[k]) audio[k] = check(await supabase!.storage.from('community').download(d.audioSrc[k]!)).data!
+    else if (d.audioSrc?.[k]) {
+      // Copied from the community: if an admin deleted that post, the song still syncs, just without this track.
+      const { data } = await supabase!.storage.from('community').download(d.audioSrc[k]!)
+      if (data) audio[k] = data
+    }
     else audio[k] = check(await supabase!.storage.from('audio').download(audioPath(uid, id, k))).data!
   }
   return { id, title: d.title, artist: d.artist, lines: d.lines, trans: d.trans, beat: d.beat, cover: d.cover, bg: d.bg, theme: d.theme, trackId: d.trackId, aliases: d.aliases, audioSrc: d.audioSrc, postId: d.postId, tags: d.tags, status: d.status, fav: d.fav, lists: d.lists, audio, audioRev: d.audio, updated: row.updated }

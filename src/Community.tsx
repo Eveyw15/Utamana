@@ -149,7 +149,7 @@ function GroupDialog({ groupId, me, admin, onClose, onChanged, onListen, onCopy 
         {state && !state.posts.length && <p className="hint">这首歌的投稿都撤回了。</p>}
         <ol className="post-list">
           {state?.posts.map((p) => {
-            const timed = p.data.lines?.some((l) => l.time != null)
+            const timed = Array.isArray(p.data.lines) && p.data.lines.some((l) => l?.time != null)
             return (
               <li key={p.id} className={p.id === state.featured ? 'featured' : ''}>
                 <div className="post-who">

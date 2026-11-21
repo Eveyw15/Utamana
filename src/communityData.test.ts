@@ -28,3 +28,15 @@ test('copyFromPost makes a new song that points at the community files', () => {
   assert.deepEqual(s.audioRev, { vocals: 0 })
   assert.equal(s.postId, undefined)
 })
+
+test('copyFromPost takes only published fields from a (possibly crafted) post', () => {
+  const data = { title: 't', artist: 'r', lines: [], postId: 'x', tags: ['t'], lists: ['L'], fav: true, status: 'learned' } as unknown as Parameters<typeof copyFromPost>[0]['data']
+  const s = copyFromPost({ data, tracks: {}, id: 'p' }, 'n')
+  for (const k of ['postId', 'tags', 'lists', 'fav', 'status']) assert.equal(k in s, false, k)
+  assert.deepEqual(copyFromPost({ data: { title: 't', artist: 'r', lines: 'bad' } as never, tracks: {}, id: 'p' }, 'n').lines, [])
+})
+
+test('copyFromPost ignores unknown or malformed track entries', () => {
+  const s = copyFromPost({ data: { title: 't', artist: 'r', lines: [] }, tracks: { vocals: 'vocals-1', evil: 'x', original: '../a' } as never, id: 'p' }, 'n')
+  assert.deepEqual(s.audioSrc, { vocals: 'p/vocals-1' })
+})

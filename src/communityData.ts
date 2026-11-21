@@ -1,7 +1,7 @@
 import type { Song } from './db'
 import type { TrackKey } from './player'
 
-// Pure helpers for community posts (kept apart from community.ts so they can be tested without Supabase).
+// Pure helpers for community posts (kept apart from communityApi.ts so they can be tested without Supabase).
 
 const TRACKS: TrackKey[] = ['original', 'vocals', 'instrumental']
 
@@ -35,13 +35,35 @@ export function tracksToUpload(song: Song, remote: Partial<Record<TrackKey, numb
   return { upload, remove }
 }
 
-// A copy for the caller's library (audio blobs are filled in by the caller after downloading).
+// A copy for the caller's library (audio blobs are filled in by the caller after downloading). Posts are written
+// by other users, so only the published fields are taken, and only well-formed track files.
+const FILE = /^(original|vocals|instrumental)-\d+$/
 export function copyFromPost(post: Pick<PostRow, 'id' | 'data' | 'tracks'>, newId: string): Song {
+  const d = post.data
   const audioSrc: Song['audioSrc'] = {}
   const audioRev: Song['audioRev'] = {}
-  for (const [k, file] of Object.entries(post.tracks) as [TrackKey, string][]) {
-    audioSrc[k] = file.includes('/') ? file : `${post.id}/${file}`
+  for (const k of TRACKS) {
+    const file = post.tracks?.[k]
+    const name = typeof file === 'string' && file.startsWith(`${post.id}/`) ? file.slice(post.id.length + 1) : file
+    if (typeof name !== 'string' || !FILE.test(name) || !name.startsWith(`${k}-`)) continue
+    audioSrc[k] = `${post.id}/${name}`
     audioRev[k] = 0
   }
-  return { ...post.data, id: newId, audio: {}, audioRev, audioSrc, updated: Date.now() }
+  return {
+    id: newId,
+    title: String(d.title ?? ''),
+    artist: String(d.artist ?? ''),
+    lines: Array.isArray(d.lines) ? d.lines : [],
+    trans: Array.isArray(d.trans) ? d.trans : undefined,
+    beat: Array.isArray(d.beat) ? d.beat : undefined,
+    cover: d.cover,
+    bg: d.bg,
+    theme: d.theme,
+    trackId: d.trackId,
+    aliases: Array.isArray(d.aliases) ? d.aliases : undefined,
+    audio: {},
+    audioRev,
+    audioSrc,
+    updated: Date.now(),
+  }
 }

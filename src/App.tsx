@@ -112,7 +112,7 @@ export default function App() {
   const [tab, setTab] = useState<'library' | 'practice' | 'settings' | 'new' | 'profile' | 'community'>('library')
   const [communityOn, setCommunityOn] = useState(false) // signed in and the community SQL has been run
   const [communityGroup, setCommunityGroup] = useState<string | null>(null) // open this song on the community page
-  const [listening, setListening] = useState<Post | null>(null) // practising a community post without copying it
+  const [listenPost, setListening] = useState<Post | null>(null) // last community post opened to try out
   const [publishing, setPublishing] = useState(false)
   const [profile, setProfile] = useState<ProfileInfo>(() => {
     try {
@@ -218,7 +218,7 @@ export default function App() {
       const list = await listSongs()
       setSongs(list)
       // Fresh device: the unsaved blank song is showing, jump to the synced library (not while filling in a new song).
-      if (list[0] && tabRef.current !== 'new' && !list.some((s) => s.id === songRef.current?.id)) await openSaved(list[0].id)
+      if (list[0] && tabRef.current !== 'new' && !songRef.current?.id.startsWith('listen:') && !list.some((s) => s.id === songRef.current?.id)) await openSaved(list[0].id)
       setSyncState('idle')
     } catch (e) {
       syncFailed(e)
@@ -313,7 +313,13 @@ export default function App() {
     setPublishing(true)
     try {
       const postId = await publish(song, { name: profile.nickname ?? user ?? undefined, avatar: profile.avatar }, player.duration || undefined)
-      if (postId !== song.postId) await update({ postId })
+      // Patch the latest saved copy: the user may have kept editing while the audio uploaded.
+      const cur = await loadSong(song.id)
+      if (cur && cur.postId !== postId) {
+        await saveSong({ ...cur, postId })
+        setSong((s) => (s?.id === cur.id ? { ...s, postId } : s))
+        queuePush({ ...cur, postId })
+      }
       alert(song.postId ? '已更新社区里的版本。' : '已发布到社区。')
     } catch (e) {
       alert(`发布失败：${e instanceof Error ? e.message : e}`)
@@ -623,6 +629,9 @@ export default function App() {
   const hasAudio = TRACKS.some((k) => song.audio[k])
   const allTags = [...new Set(songs.flatMap((s) => s.tags ?? []))].sort()
   const allLists = [...new Set(songs.flatMap((s) => s.lists ?? []))].sort()
+  // Practising a community post without copying it: only while that post's song is the one open, so opening any
+  // library song (drawer, sync, ...) ends it by itself.
+  const listening = listenPost && song?.id === `listen:${listenPost.id}` ? listenPost : null
   const allArtists = [...new Set(songs.map((s) => s.artist).filter(Boolean))].sort()
   const qPos = queue && queue.ids.indexOf(song.id)
   const tracks = player.source.tracks
