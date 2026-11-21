@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { Art } from './Art'
 import { ChipsPicker } from './ChipsPicker'
 import type { Song, SongMeta } from './db'
@@ -54,13 +54,19 @@ export function Library({ songs, currentId, onOpen, onEdit, onNew, onPatch, onDe
     saveRowOrder(next)
   }
 
-  const card = (s: SongMeta, row?: RowKey) => (
+  const card = (s: SongMeta, row?: RowKey, i = 0) => (
     <div
       key={s.id}
       className={`rec ${s.id === currentId ? 'current' : ''}`}
+      style={{ '--i': Math.min(i, 10) } as CSSProperties}
       role="button"
       tabIndex={0}
-      onClick={() => onOpen(s.id)}
+      onClick={(e) => {
+        // This sleeve morphs into the practice page's cover (see transition() in App).
+        const sleeve = e.currentTarget.querySelector<HTMLElement>('.sleeve')
+        if (sleeve) sleeve.style.viewTransitionName = 'cover'
+        onOpen(s.id)
+      }}
       onKeyDown={(e) => e.key === 'Enter' && e.target === e.currentTarget && onOpen(s.id)}
       onMouseEnter={() => onHover(s)}
       onMouseLeave={() => (onHover(null), menu === s.id && setMenu(null))}
@@ -128,6 +134,9 @@ export function Library({ songs, currentId, onOpen, onEdit, onNew, onPatch, onDe
 
       {(allLists.length > 0 || allTags.length > 0) && !sorting && (
         <div className="chips lib-filter">
+          <button className={`chip ${!filter ? 'on' : ''}`} onClick={() => setFilter(null)}>
+            全部
+          </button>
           {allLists.map((t) => (
             <button key={`l${t}`} className={`chip ${filter === `list:${t}` ? 'on' : ''}`} onClick={() => setFilter(filter === `list:${t}` ? null : `list:${t}`)}>
               ☰ {t}
@@ -158,7 +167,7 @@ export function Library({ songs, currentId, onOpen, onEdit, onNew, onPatch, onDe
               </button>
             )}
           </div>
-          <div className="lib-grid">{filtered.map((s) => card(s))}</div>
+          <div className="lib-grid">{filtered.map((s, i) => card(s, undefined, i))}</div>
         </section>
       ) : sorting ? (
         <div className="sorting">
@@ -192,7 +201,7 @@ export function Library({ songs, currentId, onOpen, onEdit, onNew, onPatch, onDe
               <h2>{ROW_LABEL[r.key]}</h2>
               <span className="hint">{r.songs.length}</span>
             </div>
-            <div className="shelf">{r.songs.map((s) => card(s, r.key))}</div>
+            <div className="shelf">{r.songs.map((s, i) => card(s, r.key, i))}</div>
           </section>
         ))
       )}
