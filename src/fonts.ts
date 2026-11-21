@@ -13,12 +13,13 @@ export const FONTS: { label: string; css: string }[] = [
   { label: '明朝 Noto Serif', css: "'Noto Serif JP', serif" },
 ]
 
-// ui/lyric: a FONTS css value, or the name of a locally installed font. uiScale: whole-page zoom; lyricSize: lyric px.
-export type FontSettings = { ui: string; lyric: string; uiScale: number; lyricSize: number }
+// ui/lyric: a FONTS css value, or the name of a locally installed font. uiScale: whole-page zoom; lyricSize: lyric px;
+// bounce: the sung line pops once as it arrives.
+export type FontSettings = { ui: string; lyric: string; uiScale: number; lyricSize: number; bounce: boolean }
 
 const KEY = 'utamana:fonts'
 
-const DEFAULTS: FontSettings = { ui: DEFAULT_STACK, lyric: DEFAULT_STACK, uiScale: 1, lyricSize: 21 }
+const DEFAULTS: FontSettings = { ui: DEFAULT_STACK, lyric: DEFAULT_STACK, uiScale: 1, lyricSize: 21, bounce: true }
 
 export function loadFonts(): FontSettings {
   try {
@@ -37,6 +38,7 @@ export function applyFonts(s: FontSettings) {
   document.documentElement.style.setProperty('--lyric-font', toCss(s.lyric))
   document.documentElement.style.setProperty('--lyric-size', `${s.lyricSize}px`)
   document.documentElement.style.zoom = String(s.uiScale)
+  document.documentElement.dataset.bounce = s.bounce ? 'on' : 'off'
   try {
     localStorage.setItem(KEY, JSON.stringify(s))
   } catch {

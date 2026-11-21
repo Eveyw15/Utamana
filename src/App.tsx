@@ -17,6 +17,7 @@ import { Art } from './Art'
 import { ChipsPicker } from './ChipsPicker'
 import { Library } from './Library'
 import { NewSong } from './NewSong'
+import { AuthPage } from './AuthPage'
 
 const player = new Player()
 const TRACKS: TrackKey[] = ['original', 'vocals', 'instrumental']
@@ -25,7 +26,20 @@ const TRACKS: TrackKey[] = ['original', 'vocals', 'instrumental']
 // cross-fades); elsewhere, or with reduced motion, they just switch.
 function transition(update: () => void) {
   if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return update()
-  document.startViewTransition(() => flushSync(update))
+  let done = false
+  const run = () => {
+    if (done) return
+    done = true
+    flushSync(update)
+  }
+  const t = document.startViewTransition(run)
+  // The browser runs the update on its next frame; a page that is not being rendered (background tab) may never
+  // get one, so after a moment just switch without the animation.
+  setTimeout(() => {
+    if (done) return
+    t.skipTransition()
+    run()
+  }, 300)
 }
 
 const newSong = (): Song => ({ id: crypto.randomUUID(), title: '新歌曲', artist: '', lines: [], audio: {}, updated: 0 })
@@ -110,6 +124,9 @@ export default function App() {
   const [coverHits, setCoverHits] = useState<CoverHit[] | null>(null) // online search results
   const [coverBusy, setCoverBusy] = useState(false)
   const [queue, setQueue] = useState<{ name: string; ids: string[] } | null>(null) // practising a playlist
+  // Playlist drawer on the right: opened by ☰ in the bar, or peeked by moving the pointer to the right edge.
+  const [drawer, setDrawer] = useState<'closed' | 'open' | 'peek'>('closed')
+  const [drawerList, setDrawerList] = useState<string | null>(null) // null = all songs
   const [savedAt, setSavedAt] = useState(0)
   const beforeAlign = useRef<Song['lines'] | null>(null) // lines before the last auto-align, for undo
   const [semi, setSemi] = useState(0)
@@ -118,6 +135,24 @@ export default function App() {
   const manualScroll = useRef(0) // when the user last scrolled the lyrics by hand
   const [fonts, setFonts] = useState<FontSettings>(loadFonts)
   const [user, setUser] = useState<string | null>(null) // signed-in email
+  const [authReady, setAuthReady] = useState(!supabase) // the saved session (if any) has been read
+  // The sign-in page shows until the first sign-in on this device, unless the user chose to stay local.
+  const [localOnly, setLocalOnly] = useState(() => {
+    try {
+      return localStorage.getItem('utamana:local') === '1'
+    } catch {
+      return false
+    }
+  })
+  const stayLocal = (on: boolean) => {
+    setLocalOnly(on)
+    try {
+      if (on) localStorage.setItem('utamana:local', '1')
+      else localStorage.removeItem('utamana:local')
+    } catch {
+      // Storage blocked: the choice lasts for this visit only.
+    }
+  }
   const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'error'>('idle')
   const [syncError, setSyncError] = useState('')
   const syncFailed = (e: unknown) => {
@@ -125,8 +160,6 @@ export default function App() {
     setSyncError((e as { message?: string })?.message ?? String(e))
     setSyncState('error')
   }
-  const [loginEmail, setLoginEmail] = useState('')
-  const [loginSent, setLoginSent] = useState(false)
   const songRef = useRef(song)
   const tabRef = useRef(tab)
   tabRef.current = tab
@@ -135,12 +168,12 @@ export default function App() {
   const taps = useRef<{ at: number; wall: number }[]>([])
   // Rarely used tools open as non-modal popovers (closed only by their own buttons, so tap-sync keeps working):
   // metronome sound / tap tempo, and lyric timing + BPM sections. 'quick' shows the everyday controls on phones.
-  const [pop, setPop] = useState<null | 'metro' | 'sync' | 'quick'>(null)
+  const [pop, setPop] = useState<null | 'sync' | 'quick'>(null)
   const pushTimer = useRef(0)
 
   useEffect(() => {
     if (!supabase) return
-    supabase.auth.getSession().then(({ data }) => setUser(data.session?.user.email ?? null))
+    supabase.auth.getSession().then(({ data }) => (setUser(data.session?.user.email ?? null), setAuthReady(true)))
     const { data } = supabase.auth.onAuthStateChange((_, s) => setUser(s?.user.email ?? null))
     return () => data.subscription.unsubscribe()
   }, [])
@@ -305,6 +338,26 @@ export default function App() {
     if (play) player.play()
   }
 
+  // Playlists live on the songs (song.lists): saving one rewrites the lists of the songs that changed.
+  async function savePlaylist(old: string | null, name: string, ids: string[]) {
+    for (const m of songs) {
+      const lists = m.lists ?? []
+      const next = lists.filter((l) => l !== old && l !== name)
+      if (ids.includes(m.id)) next.push(name)
+      if (next.length !== lists.length || next.some((l) => !lists.includes(l))) await patchSong(m.id, { lists: next })
+    }
+  }
+
+  // Play a song from the drawer; the list it was picked from becomes the queue (null = the whole library).
+  async function playFrom(list: string | null, id: string) {
+    const ids = (list ? songs.filter((s) => s.lists?.includes(list)) : songs).map((s) => s.id)
+    setQueue({ name: list ?? '全部歌曲', ids })
+    if (id === song?.id) return player.playing || player.play()
+    markOpened(id)
+    await open((await loadSong(id))!)
+    player.play()
+  }
+
   function practiceList(name: string) {
     const ids = songs.filter((s) => s.lists?.includes(name)).map((s) => s.id)
     if (!ids.length) return
@@ -432,7 +485,13 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  if (!song) return <p className="loading">加载中…</p>
+  if (!authReady || !song) return <p className="loading">加载中…</p>
+  if (supabase && !user && !localOnly)
+    return (
+      <div className="app auth-screen">
+        <AuthPage supabase={supabase} onSkip={() => stayLocal(true)} />
+      </div>
+    )
 
   const hasAudio = TRACKS.some((k) => song.audio[k])
   const allTags = [...new Set(songs.flatMap((s) => s.tags ?? []))].sort()
@@ -654,39 +713,44 @@ export default function App() {
             }}
           />
           <span className="time">{fmtTime(player.duration)}</span>
-          {/* Inline mini sliders, not hover pop-ups: they stay put and draggable while the song plays. */}
-          <label className="mini" title={`总音量 ${pct(player.volume)}`}>
+          <div className="pop" tabIndex={0} title="总音量">
             🔊
-            <input
-              type="range"
-              min={0}
-              max={1.5}
-              step={0.05}
-              value={player.volume}
-              onChange={(e) => {
-                player.volume = +e.target.value
-                rerender((n) => n + 1)
-              }}
-            />
-          </label>
-          {canVocal ? (
-            <label className="mini" title={`${onlyOriginal ? '人声（只有原曲时按频段去掉居中的人声，效果有限；上传分离好的人声和伴奏效果最好）' : '人声（伴奏音量不变）'} ${player.karaokeBusy ? '处理中…' : pct(player.source.vocal)}`}>
-              {player.karaokeBusy ? '⏳' : '🎤'}
+            <span className="pop-bar">
+              <output>{pct(player.volume)}</output>
               <input
                 type="range"
                 min={0}
-                max={1}
+                max={1.5}
                 step={0.05}
-                value={player.source.vocal}
+                value={player.volume}
                 onChange={(e) => {
-                  player.source.vocal = +e.target.value
-                  if (onlyOriginal && player.source.vocal < 1) void player.buildKaraoke()
+                  player.volume = +e.target.value
                   rerender((n) => n + 1)
                 }}
               />
-            </label>
+            </span>
+          </div>
+          {canVocal ? (
+            <div className="pop" tabIndex={0} title={onlyOriginal ? '人声：只有原曲时按频段去掉居中的人声，效果有限；上传分离好的人声和伴奏效果最好' : '人声：伴奏音量不变，只调人声'}>
+              {player.karaokeBusy ? '⏳' : '🎤'}
+              <span className="pop-bar">
+                <output>{player.karaokeBusy ? '…' : pct(player.source.vocal)}</output>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={player.source.vocal}
+                  onChange={(e) => {
+                    player.source.vocal = +e.target.value
+                    if (onlyOriginal && player.source.vocal < 1) void player.buildKaraoke()
+                    rerender((n) => n + 1)
+                  }}
+                />
+              </span>
+            </div>
           ) : (
-            <span className="mini off" title="单声道的原曲没法去人声；上传分离好的伴奏或人声后可以调">
+            <span className="pop off" title="单声道的原曲没法去人声；上传分离好的伴奏或人声后可以调">
               🎤
             </span>
           )}
@@ -700,36 +764,13 @@ export default function App() {
               <path d="M7.5 16h9" />
             </svg>
           </button>
-          {queue && (
-            <div className="pop queue" tabIndex={0} title="按歌单练习">
-              ☰ {qPos! + 1}/{queue.ids.length}
-              <div className="pop-bar queue-list">
-                <div className="queue-head">
-                  <b>{queue.name}</b>
-                  <button className="icon" title="上一首" disabled={!qPos} onClick={() => goTo(qPos! - 1)}>
-                    ⏮
-                  </button>
-                  <button className="icon" title="下一首" disabled={qPos! + 1 >= queue.ids.length} onClick={() => goTo(qPos! + 1)}>
-                    ⏭
-                  </button>
-                  <button className="icon" title="退出歌单练习" onClick={() => setQueue(null)}>
-                    ×
-                  </button>
-                </div>
-                <ol>
-                  {queue.ids.map((id, i) => (
-                    <li key={id} className={i === qPos ? 'on' : ''} onClick={() => goTo(i)}>
-                      {songs.find((x) => x.id === id)?.title ?? '（已删除）'}
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            </div>
-          )}
         </>
       ) : (
         <span className="hint">还没上传音频，点右上角「编辑」→ 音频 上传。</span>
       )}
+          <button className={`chip icon-toggle ${drawer !== 'closed' ? 'on' : ''}`} title={queue ? `播放列表：${queue.name}（${qPos! + 1}/${queue.ids.length}）` : '播放列表'} onClick={() => setDrawer(drawer === 'open' ? 'closed' : 'open')}>
+            ☰
+          </button>
       <button className={`chip quick-toggle ${pop === 'quick' ? 'on' : ''}`} title="速度、Key、显示、节拍器" onClick={() => setPop(pop === 'quick' ? null : 'quick')}>
         ⚙
       </button>
@@ -741,25 +782,36 @@ export default function App() {
     <div className={`quick no-print ${pop === 'quick' ? 'open' : ''}`}>
       {hasAudio && (
         <>
-          <div className="slider">
+          {/* Speed: hovering the row slides a slider out to the right. Key: hovering shows −1 / +1. */}
+          <div className="tune" tabIndex={0} title={baseBpm ? `原速 ${baseBpm} BPM` : undefined}>
             <span>速度</span>
-            <output>{baseBpm ? `♩=${Math.round(baseBpm * tempo)}` : pct(tempo)}</output>
-            {baseBpm ? (
-              <input type="range" title={`原速 ${baseBpm} BPM`} min={Math.round(baseBpm * 0.5)} max={Math.round(baseBpm * 1.5)} step={1} value={Math.round(baseBpm * tempo)} onChange={(e) => setTempo(+e.target.value / baseBpm)} />
-            ) : (
-              <input type="range" min={0.5} max={1.5} step={0.05} value={tempo} onChange={(e) => setTempo(+e.target.value)} />
-            )}
+            <output>{baseBpm ? `♩${Math.round(baseBpm * tempo)}` : pct(tempo)}</output>
+            <span className="reveal">
+              {baseBpm ? (
+                <input type="range" min={Math.round(baseBpm * 0.5)} max={Math.round(baseBpm * 1.5)} step={1} value={Math.round(baseBpm * tempo)} onChange={(e) => setTempo(+e.target.value / baseBpm)} />
+              ) : (
+                <input type="range" min={0.5} max={1.5} step={0.05} value={tempo} onChange={(e) => setTempo(+e.target.value)} />
+              )}
+              <button className="icon" disabled={tempo === 1} title="原速" onClick={() => setTempo(1)}>
+                ↺
+              </button>
+            </span>
           </div>
-          <div className="slider">
+          <div className="tune" tabIndex={0} title="Key（半音，±6）">
             <span>Key</span>
             <output>{semi > 0 ? `+${semi}` : semi}</output>
-            <input type="range" min={-6} max={6} step={1} value={semi} onChange={(e) => setSemi(+e.target.value)} />
+            <span className="reveal">
+              <button className="chip" disabled={semi <= -6} onClick={() => setSemi(semi - 1)}>
+                −1
+              </button>
+              <button className="chip" disabled={semi >= 6} onClick={() => setSemi(semi + 1)}>
+                +1
+              </button>
+              <button className="icon" disabled={semi === 0} title="原调" onClick={() => setSemi(0)}>
+                ↺
+              </button>
+            </span>
           </div>
-          {(tempo !== 1 || semi !== 0) && (
-            <button className="link" onClick={() => (setTempo(1), setSemi(0))}>
-              复原速度和 Key
-            </button>
-          )}
         </>
       )}
       <div className="chips">
@@ -771,11 +823,8 @@ export default function App() {
       </div>
       {hasAudio && (
         <div className="chips">
-          <button className={`chip ${pop === 'metro' ? 'on' : ''}`} title="节拍器声音、音量、点按测速" onClick={() => setPop(pop === 'metro' ? null : 'metro')}>
-            节拍器设置{baseBpm ? ` ♩=${baseBpm}` : ''}
-          </button>
-          <button className={`chip ${pop === 'sync' ? 'on' : ''}`} title="打点、校准、BPM 分段、打印" onClick={() => setPop(pop === 'sync' ? null : 'sync')}>
-            打点与 BPM
+          <button className={`chip ${pop === 'sync' ? 'on' : ''}`} title="节拍器声音、测速、BPM 分段、打点、打印" onClick={() => setPop(pop === 'sync' ? null : 'sync')}>
+            节拍与打点{baseBpm ? ` ♩=${baseBpm}` : ''}
           </button>
         </div>
       )}
@@ -787,6 +836,65 @@ export default function App() {
     </div>
   )
 
+  const listSongs_ = drawerList ? songs.filter((s) => s.lists?.includes(drawerList)) : songs
+  const drawerPanel = (
+    <>
+      <div
+        className="edge no-print"
+        onMouseEnter={() => drawer === 'closed' && setDrawer('peek')}
+        // Leaving the strip anywhere but into the drawer ends the peek.
+        onMouseLeave={(e) => drawer === 'peek' && !(e.relatedTarget instanceof Element && e.relatedTarget.closest('.drawer')) && setDrawer('closed')}
+      />
+      <aside className={`drawer no-print ${drawer !== 'closed' ? 'show' : ''}`} onMouseLeave={() => drawer === 'peek' && setDrawer('closed')}>
+        <div className="panel-head">
+          <b>播放列表</b>
+          <button className="icon" title="收起" onClick={() => setDrawer('closed')}>
+            ✕
+          </button>
+        </div>
+        <div className="chips">
+          <button className={`chip ${drawerList == null ? 'on' : ''}`} onClick={() => setDrawerList(null)}>
+            全部
+          </button>
+          {allLists.map((l) => (
+            <button key={l} className={`chip ${drawerList === l ? 'on' : ''}`} onClick={() => setDrawerList(l)}>
+              ☰ {l}
+            </button>
+          ))}
+        </div>
+        <ol className="drawer-list">
+          {listSongs_.map((s) => (
+            <li key={s.id} className={s.id === song.id ? 'on' : ''} onClick={() => playFrom(drawerList, s.id)}>
+              <Art song={s} />
+              <span>
+                <b lang="ja">{s.title}</b>
+                <small>{s.artist || '未填歌手'}</small>
+              </span>
+              {s.id === song.id && player.playing && <i className="eq" aria-hidden />}
+            </li>
+          ))}
+        </ol>
+        {queue && (
+          <div className="drawer-foot">
+            <span className="hint">
+              正在按「{queue.name}」播放 {qPos! + 1}/{queue.ids.length}
+            </span>
+            <span className="grow" />
+            <button className="icon" title="上一首" disabled={!qPos} onClick={() => goTo(qPos! - 1)}>
+              ⏮
+            </button>
+            <button className="icon" title="下一首" disabled={qPos! + 1 >= queue.ids.length} onClick={() => goTo(qPos! + 1)}>
+              ⏭
+            </button>
+            <button className="icon" title="退出歌单播放" onClick={() => setQueue(null)}>
+              ×
+            </button>
+          </div>
+        )}
+      </aside>
+    </>
+  )
+
   const popHead = (title: string) => (
     <div className="panel-head">
       <b>{title}</b>
@@ -796,33 +904,30 @@ export default function App() {
     </div>
   )
 
-  const metroPanel = (
-    <aside className="panel box no-print">
-      {popHead('节拍器')}
-      <div className="chips">
-        {Object.entries(CLICK_LABEL).map(([k, v]) => (
-          <button key={k} className={`chip ${metro.sound === k ? 'on' : ''}`} onClick={() => setMetro({ sound: k as ClickSound })}>
-            {v}
-          </button>
-        ))}
-      </div>
-      <div className="slider">
-        <span>音量</span>
-        <output>{pct(metro.volume)}</output>
-        <input type="range" min={0} max={1.5} step={0.05} value={metro.volume} onChange={(e) => setMetro({ volume: +e.target.value })} />
-      </div>
-      <div className="chips">
-        <button className={`chip ${taps.current.length ? 'on' : ''}`} disabled={!player.playing} title="播放时跟着拍子点，或按 T 键" onClick={tap}>
-          点按测速 T{taps.current.length ? ` · ${taps.current.length}` : ''}
-        </button>
-      </div>
-      <p className="hint">播放时跟着拍子点「点按测速」或按 T，点 4 下以上就设好 BPM，第一下当作小节第一拍。</p>
-    </aside>
-  )
-
   const syncPanel = (
     <aside className="panel box wide no-print">
-      {popHead('打点与 BPM')}
+      {popHead('节拍与打点')}
+      <div className="panel-sec">
+        <div className="sec-title">节拍器</div>
+        <div className="chips">
+          {Object.entries(CLICK_LABEL).map(([k, v]) => (
+            <button key={k} className={`chip ${metro.sound === k ? 'on' : ''}`} onClick={() => setMetro({ sound: k as ClickSound })}>
+              {v}
+            </button>
+          ))}
+        </div>
+        <div className="slider">
+          <span>音量</span>
+          <output>{pct(metro.volume)}</output>
+          <input type="range" min={0} max={1.5} step={0.05} value={metro.volume} onChange={(e) => setMetro({ volume: +e.target.value })} />
+        </div>
+        <div className="chips">
+          <button className={`chip ${taps.current.length ? 'on' : ''}`} disabled={!player.playing} title="播放时跟着拍子点，或按 T 键" onClick={tap}>
+            点按测速 T{taps.current.length ? ` · ${taps.current.length}` : ''}
+          </button>
+        </div>
+        <p className="hint">播放时跟着拍子点「点按测速」或按 T，点 4 下以上就设好 BPM，第一下当作小节第一拍。</p>
+      </div>
       <div className="panel-sec">
         <div className="sec-title">歌词时间</div>
         <div className="chips">
@@ -1163,20 +1268,11 @@ export default function App() {
                   </button>
                   <button onClick={() => supabase!.auth.signOut()}>退出</button>
                 </>
-              ) : loginSent ? (
-                <span className="hint">登录链接已发到 {loginEmail}，在这台电脑上点开邮件里的链接即可。</span>
               ) : (
                 <>
-                  <input type="email" placeholder="邮箱" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} />
-                  <button
-                    disabled={!loginEmail.includes('@')}
-                    onClick={async () => {
-                      const { error } = await supabase!.auth.signInWithOtp({ email: loginEmail.trim(), options: { emailRedirectTo: location.origin } })
-                      if (error) alert(`发送失败：${error.message}`)
-                      else setLoginSent(true)
-                    }}
-                  >
-                    发送登录链接
+                  <span className="hint">没登录，歌曲只存在这台设备上。</span>
+                  <button className="primary" onClick={() => stayLocal(false)}>
+                    登录 / 注册
                   </button>
                 </>
               )}
@@ -1202,6 +1298,13 @@ export default function App() {
               <output>{fonts.lyricSize}px</output>
               <input type="range" min={14} max={40} value={fonts.lyricSize} onChange={(e) => setFonts({ ...fonts, lyricSize: +e.target.value })} />
             </div>
+            <div className="sec-title">
+              唱到的那句歌词弹一下
+              <label className="switch" title="开关">
+                <input type="checkbox" checked={fonts.bounce} onChange={(e) => setFonts({ ...fonts, bounce: e.target.checked })} />
+                <i />
+              </label>
+            </div>
             <p className="jp preview" lang="ja">
               <ruby>
                 明日<rt>あした</rt>
@@ -1226,6 +1329,7 @@ export default function App() {
           onPatch={patchSong}
           onDelete={removeSong}
           onPracticeList={practiceList}
+          onSavePlaylist={savePlaylist}
           onHover={setHovered}
         />
       )}
@@ -1326,8 +1430,8 @@ export default function App() {
         </main>
       )}
 
-      {tab === 'practice' && !editing && pop === 'metro' && metroPanel}
       {tab === 'practice' && !editing && pop === 'sync' && syncPanel}
+      {tab === 'practice' && !editing && drawerPanel}
     </div>
   )
 }
