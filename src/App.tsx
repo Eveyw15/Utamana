@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { KANJI, annotateLine, setReading, type Annotated, type Seg } from './furigana'
 import { alignTranslation, fmtTime, parseLyrics, toLrc } from './lrc'
 import { Player, TRACK_LABEL, type TrackKey } from './player'
@@ -19,6 +20,13 @@ import { NewSong } from './NewSong'
 
 const player = new Player()
 const TRACKS: TrackKey[] = ['original', 'vocals', 'instrumental']
+
+// Page changes animate with the View Transitions API where the browser has it (the cover morphs, the rest
+// cross-fades); elsewhere, or with reduced motion, they just switch.
+function transition(update: () => void) {
+  if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return update()
+  document.startViewTransition(() => flushSync(update))
+}
 
 const newSong = (): Song => ({ id: crypto.randomUUID(), title: '新歌曲', artist: '', lines: [], audio: {}, updated: 0 })
 
@@ -186,21 +194,29 @@ export default function App() {
     })
   }, [])
 
-  async function openSaved(id: string) {
+  async function openSaved(id: string, edit = false) {
     markOpened(id)
-    setEditing(false)
-    setTab('practice')
-    await open((await loadSong(id))!)
+    const s = (await loadSong(id))!
+    transition(() => {
+      setEditTab('lyrics')
+      setEditing(edit)
+      setHovered(null)
+      setTab('practice')
+      void open(s)
+    })
   }
 
   // Leaving the wizard keeps the new song if it has lyrics; everything else just switches page.
   async function goTab(t: typeof tab) {
     if (tab === 'new' && t !== 'new' && newDraft.current?.lines.some((l) => l.text)) await saveNew(newDraft.current, false)
     newDraft.current = null
-    setSyncAt(null) // Space stamps lyric times while syncing; never outside the practice view
-    setEditing(false)
-    setCoverPop(false)
-    setTab(t)
+    transition(() => {
+      setSyncAt(null) // Space stamps lyric times while syncing; never outside the practice view
+      setEditing(false)
+      setCoverPop(false)
+      setHovered(null)
+      setTab(t)
+    })
   }
 
   async function saveNew(s: Song, practice = true) {
@@ -218,7 +234,7 @@ export default function App() {
     setSyncAt(null)
     setDraft(toLrc(song!.lines))
     setEditTab('lyrics')
-    setEditing(true)
+    transition(() => setEditing(true))
   }
 
   async function removeSong(id: string) {
@@ -638,44 +654,41 @@ export default function App() {
             }}
           />
           <span className="time">{fmtTime(player.duration)}</span>
-          <div className="pop" tabIndex={0} title="总音量">
-            🔊 {pct(player.volume)}
-            <span className="pop-bar">
+          {/* Inline mini sliders, not hover pop-ups: they stay put and draggable while the song plays. */}
+          <label className="mini" title={`总音量 ${pct(player.volume)}`}>
+            🔊
+            <input
+              type="range"
+              min={0}
+              max={1.5}
+              step={0.05}
+              value={player.volume}
+              onChange={(e) => {
+                player.volume = +e.target.value
+                rerender((n) => n + 1)
+              }}
+            />
+          </label>
+          {canVocal ? (
+            <label className="mini" title={`${onlyOriginal ? '人声（只有原曲时按频段去掉居中的人声，效果有限；上传分离好的人声和伴奏效果最好）' : '人声（伴奏音量不变）'} ${player.karaokeBusy ? '处理中…' : pct(player.source.vocal)}`}>
+              {player.karaokeBusy ? '⏳' : '🎤'}
               <input
                 type="range"
                 min={0}
-                max={1.5}
+                max={1}
                 step={0.05}
-                value={player.volume}
+                value={player.source.vocal}
                 onChange={(e) => {
-                  player.volume = +e.target.value
+                  player.source.vocal = +e.target.value
+                  if (onlyOriginal && player.source.vocal < 1) void player.buildKaraoke()
                   rerender((n) => n + 1)
                 }}
               />
-            </span>
-          </div>
-          {!canVocal ? (
-            <span className="pop off" title="单声道的原曲没法去人声；上传分离好的伴奏或人声后可以调">
-              🎤 —
-            </span>
+            </label>
           ) : (
-            <div className="pop" tabIndex={0} title={onlyOriginal ? '只有原曲时按频段去掉居中的人声，效果有限；上传分离好的人声和伴奏效果最好' : '伴奏音量不变，只调人声'}>
-              🎤 {player.karaokeBusy ? '处理中…' : pct(player.source.vocal)}
-              <span className="pop-bar">
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={player.source.vocal}
-                  onChange={(e) => {
-                    player.source.vocal = +e.target.value
-                    if (onlyOriginal && player.source.vocal < 1) void player.buildKaraoke()
-                    rerender((n) => n + 1)
-                  }}
-                />
-              </span>
-            </div>
+            <span className="mini off" title="单声道的原曲没法去人声；上传分离好的伴奏或人声后可以调">
+              🎤
+            </span>
           )}
           <button className={`chip ${loop.mode !== 'off' ? 'on' : ''}`} title="循环：关 → 单曲 → 单句 → 范围（点两句歌词选范围）" onClick={cycleLoop}>
             🔁 {{ off: '循环', song: '单曲', line: '单句', range: loop.to == null ? '点终点句' : '范围' }[loop.mode]}
@@ -715,7 +728,7 @@ export default function App() {
           )}
         </>
       ) : (
-        <span className="hint">还没上传音频，点「✎ 编辑」→ 音频 上传。</span>
+        <span className="hint">还没上传音频，点右上角「编辑」→ 音频 上传。</span>
       )}
       <button className={`chip quick-toggle ${pop === 'quick' ? 'on' : ''}`} title="速度、Key、显示、节拍器" onClick={() => setPop(pop === 'quick' ? null : 'quick')}>
         ⚙
@@ -994,7 +1007,7 @@ export default function App() {
         <span className="grow" />
         <span className="hint">{savedAt ? `已自动保存 ${new Date(savedAt).toLocaleTimeString()}` : '修改会自动保存'}</span>
         <button onClick={saveNow}>保存</button>
-        <button className="primary" onClick={() => setEditing(false)}>
+        <button className="primary" onClick={() => transition(() => setEditing(false))}>
           完成
         </button>
       </div>
@@ -1104,23 +1117,31 @@ export default function App() {
     <div className={`app ${tab}`}>
       <Backdrop image={lookImage} theme={themeFor(look)} mode={tab === 'practice' ? 'practice' : 'page'} playing={player.playing} pulse={pulse} />
       <header className="no-print">
-        <button className="logo" onClick={() => goTab('library')}>
+        {tab !== 'library' && (
+          <button className="back" title="返回曲库" onClick={() => goTab('library')}>
+            ‹
+          </button>
+        )}
+        <button className="logo" title="曲库" onClick={() => goTab('library')}>
           うたまな<small>Utamana</small>
         </button>
-        <nav>
-          <button className={tab === 'library' ? 'on' : ''} onClick={() => goTab('library')}>
-            曲库
-          </button>
-          <button className={tab === 'practice' ? 'on' : ''} onClick={() => goTab('practice')}>
-            练习
-          </button>
-        </nav>
+        <span className="grow" />
+        {tab === 'practice' && (
+          <nav>
+            <button className={!editing ? 'on' : ''} onClick={() => editing && transition(() => setEditing(false))}>
+              练习
+            </button>
+            <button className={editing ? 'on' : ''} onClick={() => !editing && startEdit()}>
+              编辑
+            </button>
+          </nav>
+        )}
         {user && (
           <span className={`sync ${syncState}`} title={syncState === 'error' ? syncError : undefined}>
             {{ idle: '已同步', syncing: '同步中…', error: `同步失败：${syncError}` }[syncState]}
           </span>
         )}
-        <button className={`chip ${tab === 'settings' ? 'on' : ''}`} title="设置" onClick={() => goTab(tab === 'settings' ? 'practice' : 'settings')}>
+        <button className={`chip ${tab === 'settings' ? 'on' : ''}`} title="设置" onClick={() => goTab(tab === 'settings' ? 'library' : 'settings')}>
           设置
         </button>
       </header>
@@ -1200,12 +1221,7 @@ export default function App() {
           songs={songs}
           currentId={song.id}
           onOpen={(id) => (setQueue(null), void openSaved(id))}
-          onEdit={async (id) => {
-            setQueue(null)
-            await openSaved(id)
-            setEditTab('lyrics')
-            setEditing(true)
-          }}
+          onEdit={(id) => (setQueue(null), void openSaved(id, true))}
           onNew={() => goTab('new')}
           onPatch={patchSong}
           onDelete={removeSong}
@@ -1266,9 +1282,6 @@ export default function App() {
                 {song.title}
               </b>
               <span className="stage-artist">{song.artist || '未填歌手'}</span>
-              <button className="chip edit-btn" onClick={startEdit}>
-                ✎ 编辑
-              </button>
             </div>
           )}
 
@@ -1288,12 +1301,13 @@ export default function App() {
                   {song.title}
                   {song.artist && <small> {song.artist}</small>}
                 </h1>
-                {!song.lines.length && <p className="hint no-print">还没有歌词，点「✎ 编辑」粘贴。</p>}
+                {!song.lines.length && <p className="hint no-print">还没有歌词，点右上角「编辑」粘贴。</p>}
                 <ol>
                   {song.lines.map((l, i, all) => (
                     <li
                       key={i}
                       ref={i === active ? activeRef : undefined}
+                      style={{ '--i': Math.min(i, 14) } as React.CSSProperties}
                       className={[!l.text && 'gap', i === active && 'active', i === nextSync && 'next', inLoop(i) && 'in-loop'].filter(Boolean).join(' ')}
                       onClick={() => l.time != null && syncAt == null && clickLine(i, l.time)}
                     >

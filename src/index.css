@@ -340,3 +340,39 @@ ruby.editable:hover { background: var(--glass); }
 }
 .icon-toggle { display: grid; place-items: center; width: 34px; height: 30px; padding: 0; }
 .icon-toggle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; stroke-linecap: round; }
+
+/* ---------- Round 2: layout width, header, mini sliders, motion ---------- */
+header, .stage, .library-page { width: 100%; max-width: 1280px; margin-left: auto; margin-right: auto; }
+.stage { max-width: 1200px; }
+.back { width: 34px; height: 34px; padding: 0; font-size: 22px; line-height: 1; display: grid; place-items: center; }
+.mini { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; cursor: pointer; }
+.mini input { width: 72px; margin: 0; }
+.mini.off { opacity: .4; cursor: default; }
+/* Speed / Key: one line each (label, slider, value). */
+.quick .slider { grid-template-columns: 2.6em 1fr 4.2em; gap: 8px; }
+.quick .slider input[type=range] { grid-column: 2; grid-row: 1; }
+.quick .slider output { grid-column: 3; grid-row: 1; text-align: right; font-size: 13px; }
+.quick .slider span { font-size: 13px; }
+/* Hovered record sits above its right-hand neighbour, so its vinyl slides out on top. */
+.rec { z-index: 0; }
+.rec:hover, .rec:focus-within { z-index: 4; }
+
+/* Motion: cover morph between library and practice, page cross-fade, staggered entrances. */
+.stage-art > .art, .art-btn .art { view-transition-name: cover; }
+::view-transition-group(cover) { animation-duration: .45s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .3s; }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+/* On the line's children, not the li: the li's own animation changes with .active and would replay. */
+.sheet li > :not(.edit-line) { animation: rise .5s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i, 0) * 35ms); }
+.rec { animation: rise .45s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i, 0) * 40ms); }
+.stage-meta, .quick, .transport, .work, .lib-head, .lib-filter { animation: rise .4s cubic-bezier(.2, .8, .2, 1) both; }
+.quick { animation-delay: .05s; }
+.transport { animation-delay: .1s; }
+.panel, .cover-pop, .menu { animation: pop .18s ease-out; }
+@keyframes pop { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+button, .chip, .rec .sleeve { transition: background .15s, color .15s, border-color .15s, transform .2s; }
+button:active:not(:disabled) { transform: scale(.96); }
+@media (prefers-reduced-motion: reduce) {
+  .sheet li > :not(.edit-line), .rec, .stage-meta, .quick, .transport, .work, .lib-head, .lib-filter, .panel, .cover-pop, .menu { animation: none !important; }
+}
+@media print { header, .stage { max-width: none; } }
