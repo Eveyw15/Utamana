@@ -655,7 +655,10 @@ export default function App() {
     const audio = { ...song!.audio }
     if (file) audio[k] = file
     else delete audio[k]
-    await update({ audio, audioRev: { ...song!.audioRev, [k]: Date.now() } })
+    // A replaced (or removed) track is the user's own now: it no longer points at the community file.
+    const audioSrc = { ...song!.audioSrc }
+    delete audioSrc[k]
+    await update({ audio, audioRev: { ...song!.audioRev, [k]: Date.now() }, audioSrc })
     await player.load(k, file)
   }
 

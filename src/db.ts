@@ -21,6 +21,8 @@ export type Song = {
   lists?: string[] // names of the playlists the song is in
   audio: Partial<Record<TrackKey, Blob>>
   audioRev?: Partial<Record<TrackKey, number>> // bumped when a track is replaced, so sync knows what to upload
+  audioSrc?: Partial<Record<TrackKey, string>> // copied from the community: track file in the community bucket (not re-uploaded)
+  postId?: string // this song's own community post, if published
   updated: number
 }
 
