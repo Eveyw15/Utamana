@@ -68,3 +68,48 @@ export function beatPhase(sections: Section[], t: number): number | null {
   if (!s || !(s.bpm > 0)) return null
   return (((t - s.time) * s.bpm) / 60) % 1
 }
+
+// Tempo and first beat from an onset envelope (one value per `hop` seconds; see onsetStrength in align.ts).
+// Autocorrelation picks the beat period between 55 and 200 BPM, gently preferring tempos near 120 so it
+// doesn't settle on half or double time; the phase is where the onsets line up best with that period.
+// A steady-tempo estimate: songs that change tempo still need sections added by hand.
+export function estimateTempo(onset: Float32Array, hop = 0.01): { bpm: number; first: number } | null {
+  const n = onset.length
+  const minLag = Math.floor(60 / 200 / hop)
+  const maxLag = Math.ceil(60 / 55 / hop)
+  if (n < maxLag * 8) return null
+  let mean = 0
+  for (const v of onset) mean += v
+  mean /= n
+  const x = Float32Array.from(onset, (v) => v - mean)
+  let energy = 0
+  for (const v of x) energy += v * v
+  if (energy < 1e-6) return null
+  const r = new Float64Array(maxLag + 2)
+  for (let lag = minLag - 1; lag <= maxLag + 1; lag++) {
+    let s = 0
+    for (let i = 0; i + lag < n; i++) s += x[i] * x[i + lag]
+    r[lag] = s / (n - lag)
+  }
+  let best = minLag
+  let score = -Infinity
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    const w = Math.exp(-0.5 * (Math.log2(60 / (lag * hop) / 120) / 0.9) ** 2)
+    if (r[lag] * w > score) (score = r[lag] * w), (best = lag)
+  }
+  if (!(r[best] > 0)) return null
+  // Parabolic interpolation around the peak gives a fractional period (e.g. 93 BPM is 64.5 frames).
+  const [a, b, c] = [r[best - 1], r[best], r[best + 1]]
+  const curve = a - 2 * b + c
+  const period = best + (curve ? Math.max(-0.5, Math.min(0.5, (0.5 * (a - c)) / curve)) : 0)
+  const raw = 60 / (period * hop)
+  const bpm = Math.abs(raw - Math.round(raw)) < 0.4 ? Math.round(raw) : Math.round(raw * 10) / 10
+  let phase = 0
+  let most = -Infinity
+  for (let p = 0; p < Math.ceil(period); p++) {
+    let s = 0
+    for (let t = p; t < n; t += period) s += onset[Math.round(t)] ?? 0
+    if (s > most) (most = s), (phase = p)
+  }
+  return { bpm, first: +(phase * hop).toFixed(3) }
+}

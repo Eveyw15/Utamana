@@ -1,7 +1,7 @@
 // Run: node --test src/beat.test.ts
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { anchorFirst, beatGrid, beatPhase, parseSections, snapToBeat, tapFit } from './beat.ts'
+import { anchorFirst, beatGrid, beatPhase, estimateTempo, parseSections, snapToBeat, tapFit } from './beat.ts'
 
 test('tapFit averages tap gaps and smooths the first beat', () => {
   assert.equal(tapFit([1]), null)
@@ -50,4 +50,29 @@ test('beatPhase is the fraction of the current beat, null without a running sect
   assert.equal(beatPhase(s, 1), 0)
   assert.ok(Math.abs(beatPhase(s, 1.25)! - 0.5) < 1e-9) // 120 BPM: a beat is 0.5 s
   assert.equal(beatPhase(s, 6), null) // BPM 0 section is silent
+})
+
+// Onset envelope (10 ms frames) with a pulse on every beat plus deterministic noise.
+function pulses(bpm: number, first: number, seconds: number) {
+  const hop = 0.01, out = new Float32Array(Math.round(seconds / hop))
+  let seed = 7
+  for (let i = 0; i < out.length; i++) out[i] = ((seed = (seed * 16807) % 2147483647) / 2147483647) * 0.2
+  for (let t = first; t < seconds; t += 60 / bpm) out[Math.round(t / hop)] += 1
+  return out
+}
+
+test('estimateTempo finds the BPM and the first beat of a steady pulse', () => {
+  const a = estimateTempo(pulses(120, 0.23, 60))!
+  assert.ok(Math.abs(a.bpm - 120) <= 1, String(a.bpm))
+  assert.ok(Math.abs(a.first - 0.23) <= 0.02, String(a.first))
+  const b = estimateTempo(pulses(150, 1.1, 60))!
+  assert.ok(Math.abs(b.bpm - 150) <= 1, String(b.bpm))
+  assert.ok(Math.abs(((b.first - 1.1) % 0.4 + 0.4) % 0.4) <= 0.02 || Math.abs(((b.first - 1.1) % 0.4 + 0.4) % 0.4 - 0.4) <= 0.02, String(b.first))
+  const c = estimateTempo(pulses(93, 0.5, 60))!
+  assert.ok(Math.abs(c.bpm - 93) <= 1, String(c.bpm))
+})
+
+test('estimateTempo gives up on silence or a clip too short to tell', () => {
+  assert.equal(estimateTempo(new Float32Array(6000)), null)
+  assert.equal(estimateTempo(pulses(120, 0, 2)), null)
 })

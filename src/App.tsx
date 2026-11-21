@@ -5,7 +5,7 @@ import { alignTranslation, fmtTime, parseLyrics, toLrc } from './lrc'
 import { Player, TRACK_LABEL, type TrackKey } from './player'
 import { alignTimes } from './align'
 import { searchCovers, toBackground, toCover, type CoverHit } from './cover'
-import { CLICK_LABEL, anchorFirst, beatGrid, beatPhase, parseSections, snapToBeat, tapFit, type ClickSound, type Section } from './beat'
+import { CLICK_LABEL, anchorFirst, beatGrid, beatPhase, estimateTempo, parseSections, snapToBeat, tapFit, type ClickSound, type Section } from './beat'
 import { translateLines } from './translate'
 import { FONTS, applyFonts, loadFonts, type FontSettings } from './fonts'
 import { deleteRemote, pushSong, supabase, syncAll } from './cloud'
@@ -18,6 +18,7 @@ import { ChipsPicker } from './ChipsPicker'
 import { Library } from './Library'
 import { NewSong } from './NewSong'
 import { AuthPage } from './AuthPage'
+import { LyricsSearch } from './LyricsSearch'
 import { PasswordForm } from './PasswordForm'
 import { Avatar, Profile, type ProfileInfo } from './Profile'
 import { logPractice } from './practice'
@@ -116,6 +117,9 @@ export default function App() {
   const [editing, setEditing] = useState(false) // practice page switched to edit mode
   const [editTab, setEditTab] = useState<'lyrics' | 'trans' | 'audio'>('lyrics')
   const [coverPop, setCoverPop] = useState(false)
+  const [lyricFind, setLyricFind] = useState(false) // edit mode: online lyrics search open
+  const [detecting, setDetecting] = useState(false) // auto BPM running
+  const autoBeatTried = useRef(new Set<string>()) // songs we already auto-detected a tempo for this visit
   const [hovered, setHovered] = useState<SongMeta | null>(null) // library card under the pointer, tints the background
   const newDraft = useRef<Song | null>(null) // new-song wizard contents, kept if the user leaves with lyrics filled in
   const [draft, setDraft] = useState('')
@@ -398,6 +402,13 @@ export default function App() {
     }
   }, [song?.lines.map((l) => l.text).join('\n')])
 
+  // A song with audio but no beat gets one detected automatically, once per visit.
+  useEffect(() => {
+    if (tab !== 'practice' || !song || song.beat?.length || !player.duration || autoBeatTried.current.has(song.id)) return
+    autoBeatTried.current.add(song.id)
+    void autoBeat(false)
+  })
+
   // Practice time for the profile page: count playback in 5 s steps (local only).
   useEffect(() => {
     const id = setInterval(() => player.playing && logPractice(5), 5000)
@@ -676,6 +687,22 @@ export default function App() {
       update({ beat: [{ time: anchorFirst(fit.first, fit.bpm, beats), bpm: fit.bpm, beats }, ...beat.slice(1)] })
     } else setSection(i, { bpm: fit.bpm })
     player.source.metronome.on = true
+  }
+
+  // Tempo from the audio: one steady section starting on the detected first beat. Runs once by itself for a
+  // song with audio and no beat yet; the button runs it again (asking before replacing hand-made sections).
+  async function autoBeat(ask = true) {
+    if (ask && song!.beat?.length && !confirm('用自动检测的结果替换现在的节拍设置？')) return
+    setDetecting(true)
+    try {
+      const onset = await player.beatOnsets()
+      const t = onset && estimateTempo(onset)
+      if (!t) return ask && alert('没能从音频里听出稳定的节拍，可以用「点按测速」手动设。')
+      const beats = song!.beat?.[0]?.beats ?? 4
+      await update({ beat: [{ time: anchorFirst(t.first, t.bpm, beats), bpm: t.bpm, beats }] })
+    } finally {
+      setDetecting(false)
+    }
   }
 
   async function importBeat(file?: File) {
@@ -971,11 +998,14 @@ export default function App() {
           <input type="range" min={0} max={1.5} step={0.05} value={metro.volume} onChange={(e) => setMetro({ volume: +e.target.value })} />
         </div>
         <div className="chips">
+          <button className="chip" disabled={detecting} title="从音频里听出 BPM 和第一拍" onClick={() => autoBeat()}>
+            {detecting ? '检测中…' : '自动检测 BPM'}
+          </button>
           <button className={`chip ${taps.current.length ? 'on' : ''}`} disabled={!player.playing} title="播放时跟着拍子点，或按 T 键" onClick={tap}>
             点按测速 T{taps.current.length ? ` · ${taps.current.length}` : ''}
           </button>
         </div>
-        <p className="hint">播放时跟着拍子点「点按测速」或按 T，点 4 下以上就设好 BPM，第一下当作小节第一拍。</p>
+        <p className="hint">有音频又没设过节拍的歌会自动检测一次。不准的话：跟着拍子点「点按测速」或按 T（4 下以上），或在下面的 BPM 分段里微调。</p>
       </div>
       <div className="panel-sec">
         <div className="sec-title">歌词时间</div>
@@ -1168,6 +1198,9 @@ export default function App() {
       {editTab === 'lyrics' && (
         <div className="pane box">
           <div className="chips">
+            <button className={`chip ${lyricFind ? 'on' : ''}`} onClick={() => setLyricFind(!lyricFind)}>
+              联网搜索歌词
+            </button>
             <label className="button chip">
               导入 .txt / .lrc
               <input hidden type="file" accept=".txt,.lrc,text/plain" onChange={(e) => importLyrics(e.target.files?.[0])} />
@@ -1179,6 +1212,18 @@ export default function App() {
               一行一句，纯文本或 LRC；读音不对写成 <code>漢字{'{'}よみ{'}'}</code>
             </span>
           </div>
+          {lyricFind && (
+            <LyricsSearch
+              initial={`${song.title === '新歌曲' ? '' : song.title} ${song.artist}`.trim()}
+              duration={player.duration || undefined}
+              onPick={(h) => {
+                if (song.lines.some((l) => l.text) && !confirm(`用「${h.title} · ${h.artist}」的歌词替换现在的歌词？`)) return
+                setDraft(h.text)
+                update({ lines: parseLyrics(h.text) })
+                setLyricFind(false)
+              }}
+            />
+          )}
           <textarea
             lang="ja"
             value={draft}

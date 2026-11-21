@@ -4,6 +4,7 @@ import { searchCovers, toCover, type CoverHit } from './cover'
 import type { Song } from './db'
 import { parseLyrics } from './lrc'
 import { TRACK_LABEL, type TrackKey } from './player'
+import { LyricsSearch } from './LyricsSearch'
 
 const TRACKS: TrackKey[] = ['original', 'vocals', 'instrumental']
 
@@ -55,7 +56,7 @@ export function NewSong({ artists, draft, onDone, onCancel }: Props) {
   // Step 2 opens with results already listed, searched by the file name or the first lyric line.
   function next() {
     if (step === 1 && !hits) {
-      const q = fileName || firstLine
+      const q = title && artist ? `${title} ${artist}` : fileName || firstLine
       setTerm(q)
       void search(q)
     }
@@ -101,8 +102,16 @@ export function NewSong({ artists, draft, onDone, onCancel }: Props) {
 
         {step === 1 && (
           <section className="wizard-body">
-            <p className="hint">粘贴歌词，一行一句；纯文本或带时间的 LRC 都行。</p>
-            <textarea lang="ja" autoFocus spellCheck={false} value={text} placeholder="在这里粘贴歌词…" onChange={(e) => setText(e.target.value)} />
+            <LyricsSearch
+              initial=""
+              onPick={(h) => {
+                setText(h.text)
+                setTitle(h.title)
+                setArtist(h.artist)
+              }}
+            />
+            <p className="hint">也可以直接粘贴歌词，一行一句；纯文本或带时间的 LRC 都行。</p>
+            <textarea lang="ja" spellCheck={false} value={text} placeholder="在这里粘贴歌词…" onChange={(e) => setText(e.target.value)} />
             <div className="chips">
               <label className="button">
                 导入 .txt / .lrc

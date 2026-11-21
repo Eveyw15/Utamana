@@ -184,6 +184,17 @@ export class Player {
     return onsetStrength((await off.startRendering()).getChannelData(0), buf.sampleRate)
   }
 
+  // Full-band mono mix of the backing (instrumental, else original), as onset strength for tempo detection.
+  async beatOnsets() {
+    const buf = this.source.tracks.instrumental ?? this.source.tracks.original ?? this.source.tracks.vocals
+    if (!buf) return null
+    const off = new OfflineAudioContext(1, buf.length, buf.sampleRate)
+    const src = new AudioBufferSourceNode(off, { buffer: buf })
+    src.connect(off.destination)
+    src.start()
+    return onsetStrength((await off.startRendering()).getChannelData(0), buf.sampleRate)
+  }
+
   clear() {
     this.pause()
     this.source.tracks = {}
