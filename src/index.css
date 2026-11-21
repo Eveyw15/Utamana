@@ -504,3 +504,7 @@ button:active:not(:disabled) { transform: scale(.96); }
 .lyric-hits em { font-style: normal; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .lyric-hits i { font-style: normal; font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--glass); color: var(--muted); white-space: nowrap; }
 .lyric-hits i.on { background: rgba(255, 255, 255, .85); color: #222; }
+/* Inline reading / line edit under a lyric line (does not stop playback). */
+.inline-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; padding: 8px 10px; border-radius: 12px; background: var(--glass-strong); border: 1px solid var(--line); filter: none; color: #fff; }
+.inline-edit .hint { flex-basis: 100%; font-size: 12px; }
+.inline-edit input { flex: 1; min-width: 160px; font-size: 15px; }

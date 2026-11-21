@@ -117,6 +117,9 @@ export default function App() {
   const [editing, setEditing] = useState(false) // practice page switched to edit mode
   const [editTab, setEditTab] = useState<'lyrics' | 'trans' | 'audio'>('lyrics')
   const [coverPop, setCoverPop] = useState(false)
+  // Inline edit on the practice page: a reading (seg) or the whole line i. Not prompt(): that freezes the page
+  // and the audio with it (the mix runs on the main thread), and these edits should not stop the music.
+  const [lineEdit, setLineEdit] = useState<{ i: number; seg?: Seg; value: string } | null>(null)
   const [lyricFind, setLyricFind] = useState(false) // edit mode: online lyrics search open
   const [detecting, setDetecting] = useState(false) // auto BPM running
   const autoBeatTried = useRef(new Set<string>()) // songs we already auto-detected a tempo for this visit
@@ -262,6 +265,7 @@ export default function App() {
   async function goTab(t: typeof tab) {
     if (tab === 'new' && t !== 'new' && newDraft.current?.lines.some((l) => l.text)) await saveNew(newDraft.current, false)
     newDraft.current = null
+    if (t !== 'practice' && player.playing) player.pause() // music stops once you leave the practice page
     transition(() => {
       setSyncAt(null) // Space stamps lyric times while syncing; never outside the practice view
       setEditing(false)
@@ -523,7 +527,7 @@ export default function App() {
 
   // Practice page shortcuts: T = tap tempo, Space = play/pause (Space belongs to lyric sync while syncing).
   useEffect(() => {
-    if (tab !== 'practice' || editing || syncAt != null) return
+    if (tab !== 'practice' || syncAt != null) return
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
       if (e.repeat || target.closest?.('textarea, select, input:not([type=range]):not([type=checkbox])')) return
@@ -736,13 +740,16 @@ export default function App() {
   }
 
   function editReading(i: number, s: Seg) {
-    const r = prompt(`「${s.text}」的读音（假名或罗马音，留空恢复自动）`, s.ruby ?? '')
-    if (r != null) setLine(i, setReading(song!.lines[i].text, s, r))
+    setLineEdit({ i, seg: s, value: s.ruby ?? '' })
   }
-
   function editLine(i: number) {
-    const t = prompt('修改歌词（读音可写成 漢字{よみ}）', song!.lines[i].text)
-    if (t != null) setLine(i, t.trim())
+    setLineEdit({ i, value: song!.lines[i].text })
+  }
+  function commitLineEdit() {
+    if (!lineEdit) return
+    const { i, seg, value } = lineEdit
+    setLine(i, seg ? setReading(song!.lines[i].text, seg, value) : value.trim())
+    setLineEdit(null)
   }
 
   async function importLyrics(file?: File) {
@@ -1516,13 +1523,38 @@ export default function App() {
                       ref={i === active ? activeRef : undefined}
                       style={{ '--i': Math.min(i, 14) } as React.CSSProperties}
                       className={[!l.text && 'gap', i === active && 'active', i === nextSync && 'next', inLoop(i) && 'in-loop'].filter(Boolean).join(' ')}
-                      onClick={() => l.time != null && syncAt == null && clickLine(i, l.time)}
+                      onClick={() => lineEdit?.i !== i && l.time != null && syncAt == null && clickLine(i, l.time)}
                     >
                       {l.text && <LyricLine a={annotated[i]} trans={song.trans?.[all.slice(0, i).filter((x) => x.text).length]} show={show} onRuby={(s) => editReading(i, s)} />}
                       {l.text && (
                         <button className="edit-line no-print" title="修改这句歌词" onClick={(e) => (e.stopPropagation(), editLine(i))}>
                           ✎
                         </button>
+                      )}
+                      {lineEdit?.i === i && (
+                        <form
+                          className="inline-edit no-print"
+                          onClick={(e) => e.stopPropagation()}
+                          onSubmit={(e) => {
+                            e.preventDefault()
+                            commitLineEdit()
+                          }}
+                        >
+                          <span className="hint">{lineEdit.seg ? `「${lineEdit.seg.text}」的读音（假名或罗马音，留空恢复自动）` : '修改这句（读音可写成 漢字{よみ}）'}</span>
+                          <input
+                            autoFocus
+                            lang="ja"
+                            value={lineEdit.value}
+                            onChange={(e) => setLineEdit({ ...lineEdit, value: e.target.value })}
+                            onKeyDown={(e) => e.key === 'Escape' && setLineEdit(null)}
+                          />
+                          <button type="submit" className="primary">
+                            确定
+                          </button>
+                          <button type="button" onClick={() => setLineEdit(null)}>
+                            取消
+                          </button>
+                        </form>
                       )}
                     </li>
                   ))}
