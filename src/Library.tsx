@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Art } from './Art'
 import { ChipsPicker } from './ChipsPicker'
 import { PlaylistEditor } from './PlaylistEditor'
@@ -264,14 +264,51 @@ export function Library({ songs, currentId, onOpen, onEdit, onNew, onPatch, onDe
       ) : (
         rows.map((r) => (
           <section key={r.key} className="lib-row">
-            <div className="row-head">
-              <h2>{rowLabel(r.key)}</h2>
-              <span className="hint">{r.songs.length}</span>
-            </div>
-            <div className="shelf">{r.songs.map((s, i) => card(s, r.key, i))}</div>
+            <Shelf title={rowLabel(r.key)} count={r.songs.length}>
+              {r.songs.map((s, i) => card(s, r.key, i))}
+            </Shelf>
           </section>
         ))
       )}
     </main>
+  )
+}
+
+// A row of records that scrolls sideways; ‹ › page through it (the scrollbar is hidden and a mouse wheel
+// only scrolls vertically), each shown only while there is more in that direction.
+function Shelf({ title, count, children }: { title: string; count: number; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [more, setMore] = useState({ left: false, right: false })
+  const measure = () => {
+    const el = ref.current
+    if (el) setMore({ left: el.scrollLeft > 4, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 })
+  }
+  useEffect(() => {
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(ref.current!)
+    return () => ro.disconnect()
+  }, [count])
+  const page = (dir: number) => ref.current?.scrollBy({ left: dir * ref.current.clientWidth * 0.8, behavior: 'smooth' })
+  return (
+    <>
+      <div className="row-head">
+        <h2>{title}</h2>
+        <span className="hint">{count}</span>
+        {(more.left || more.right) && (
+          <span className="pager">
+            <button className="chip" title="上一页" disabled={!more.left} onClick={() => page(-1)}>
+              ‹
+            </button>
+            <button className="chip" title="下一页" disabled={!more.right} onClick={() => page(1)}>
+              ›
+            </button>
+          </span>
+        )}
+      </div>
+      <div className="shelf" ref={ref} onScroll={measure}>
+        {children}
+      </div>
+    </>
   )
 }

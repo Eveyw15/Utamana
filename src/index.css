@@ -237,7 +237,8 @@ ruby.editable:hover { background: var(--glass); }
 .row-head { display: flex; align-items: baseline; gap: 10px; padding: 0 var(--pad); margin-bottom: 12px; }
 .row-head h2 { font-size: 20px; }
 .row-head .primary { margin-left: auto; }
-.shelf { display: flex; gap: 28px; padding: 8px var(--pad) 18px; overflow-x: auto; scrollbar-width: none; }
+/* End padding fits the last record's vinyl sliding out (~30% of the card); the scroller clips anything past it. */
+.shelf { display: flex; gap: 28px; padding: 8px max(var(--pad), 64px) 18px var(--pad); overflow-x: auto; scrollbar-width: none; }
 .shelf::-webkit-scrollbar { display: none; }
 .lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 28px 24px; padding: 8px var(--pad); }
 .empty-card { margin: 24px var(--pad); width: 168px; aspect-ratio: 1; border-radius: 8px; border: 1.5px dashed var(--line); background: none; color: var(--muted); }
@@ -508,3 +509,7 @@ button:active:not(:disabled) { transform: scale(.96); }
 .inline-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; padding: 8px 10px; border-radius: 12px; background: var(--glass-strong); border: 1px solid var(--line); filter: none; color: #fff; }
 .inline-edit .hint { flex-basis: 100%; font-size: 12px; }
 .inline-edit input { flex: 1; min-width: 160px; font-size: 15px; }
+/* Row pager: ‹ › at the right of a row's heading, only when the row overflows. */
+.row-head .pager { margin-left: auto; display: flex; gap: 6px; }
+.row-head .pager .chip { width: 30px; height: 28px; padding: 0; font-size: 18px; line-height: 1; display: grid; place-items: center; }
+.row-head .pager .chip:disabled { opacity: .35; cursor: default; }
