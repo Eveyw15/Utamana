@@ -6,6 +6,7 @@ import { parseLyrics } from './lrc'
 import { TRACK_LABEL, type TrackKey } from './player'
 import { LyricsSearch } from './LyricsSearch'
 import { search as searchCommunity, type GroupCard } from './communityApi'
+import { guessExtras } from './songName'
 
 const TRACKS: TrackKey[] = ['original', 'vocals', 'instrumental']
 
@@ -23,6 +24,8 @@ type Props = {
 // one click), audio (optional).
 export function NewSong({ artists, draft, onDone, onCancel, onCommunity }: Props) {
   const [shared, setShared] = useState<GroupCard[]>([])
+  // Kana / romaji and translation: guessed from the lyrics until the user picks themselves.
+  const [extras, setExtras] = useState<{ noReading: boolean; noTrans: boolean } | null>(null)
   const [id] = useState(() => crypto.randomUUID())
   const [step, setStep] = useState(1)
   const [text, setText] = useState('')
@@ -40,7 +43,8 @@ export function NewSong({ artists, draft, onDone, onCancel, onCommunity }: Props
 
   const lines = parseLyrics(text)
   const firstLine = lines.find((l) => l.text)?.text.replace(/\{[^}]*\}/g, '') ?? ''
-  const song: Song = { id, title: title.trim() || fileName || firstLine || '新歌曲', artist: artist.trim(), lines, cover, trackId: picked?.trackId, aliases: picked?.aliases, audio, audioRev, updated: 0 }
+  const { noReading, noTrans } = extras ?? guessExtras(text)
+  const song: Song = { noReading: noReading || undefined, noTrans: noTrans || undefined, id, title: title.trim() || fileName || firstLine || '新歌曲', artist: artist.trim(), lines, cover, trackId: picked?.trackId, aliases: picked?.aliases, audio, audioRev, updated: 0 }
   useEffect(() => {
     draft.current = song
   })
@@ -116,6 +120,15 @@ export function NewSong({ artists, draft, onDone, onCancel, onCommunity }: Props
               }}
             />
             <p className="hint">也可以直接粘贴歌词，一行一句；纯文本或带时间的 LRC 都行。</p>
+            <div className="chips">
+              <span className="hint">这首歌要：</span>
+              <button className={`chip ${!noReading ? 'on' : ''}`} title="日语歌才需要；英语、中文歌可以关掉" onClick={() => setExtras({ noReading: !noReading, noTrans })}>
+                假名和罗马音
+              </button>
+              <button className={`chip ${!noTrans ? 'on' : ''}`} title="中文歌可以关掉" onClick={() => setExtras({ noReading, noTrans: !noTrans })}>
+                翻译
+              </button>
+            </div>
             <textarea lang="ja" spellCheck={false} value={text} placeholder="在这里粘贴歌词…" onChange={(e) => setText(e.target.value)} />
             <div className="chips">
               <label className="button">

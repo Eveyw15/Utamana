@@ -9,6 +9,8 @@ export type Song = {
   artist: string
   lines: Line[]
   trans?: string[] // one per non-empty lyric line
+  noReading?: boolean // not Japanese: no kana / romaji
+  noTrans?: boolean // no translation (e.g. already Chinese)
   beat?: Section[] // metronome sections, see beat.ts
   cover?: string // album cover, small JPEG data URL (see cover.ts)
   bg?: string // uploaded background image, large JPEG data URL; replaces the cover as the page background

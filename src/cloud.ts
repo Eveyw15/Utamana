@@ -11,7 +11,7 @@ export const supabase = url && key ? createClient(url, key) : null
 
 const TRACKS: TrackKey[] = ['original', 'vocals', 'instrumental']
 type Revs = Partial<Record<TrackKey, number>>
-type Data = Pick<Song, 'title' | 'artist' | 'lines' | 'trans' | 'beat' | 'cover' | 'bg' | 'theme' | 'trackId' | 'aliases' | 'audioSrc' | 'postId' | 'tags' | 'status' | 'fav' | 'lists'> & { audio: Revs }
+type Data = Pick<Song, 'title' | 'artist' | 'lines' | 'trans' | 'noReading' | 'noTrans' | 'beat' | 'cover' | 'bg' | 'theme' | 'trackId' | 'aliases' | 'audioSrc' | 'postId' | 'tags' | 'status' | 'fav' | 'lists'> & { audio: Revs }
 
 const audioPath = (uid: string, id: string, k: TrackKey) => `${uid}/${id}/${k}`
 
@@ -35,8 +35,8 @@ export async function pushSong(song: Song) {
   const { upload, remove } = tracksToUpload(song, remoteRev)
   for (const k of upload) check(await supabase.storage.from('audio').upload(audioPath(uid, song.id, k), song.audio[k]!, { upsert: true }))
   if (remove.length) check(await supabase.storage.from('audio').remove(remove.map((k) => audioPath(uid, song.id, k))))
-  const { title, artist, lines, trans, beat, cover, bg, theme, trackId, aliases, audioSrc, postId, tags, status, fav, lists } = song
-  const data: Data = { title, artist, lines, trans, beat, cover, bg, theme, trackId, aliases, audioSrc, postId, tags, status, fav, lists, audio }
+  const { title, artist, lines, trans, noReading, noTrans, beat, cover, bg, theme, trackId, aliases, audioSrc, postId, tags, status, fav, lists } = song
+  const data: Data = { title, artist, lines, trans, noReading, noTrans, beat, cover, bg, theme, trackId, aliases, audioSrc, postId, tags, status, fav, lists, audio }
   check(await supabase.from('songs').upsert({ id: song.id, data, updated: song.updated, deleted: false }))
 }
 
@@ -62,7 +62,7 @@ async function pullSong(uid: string, id: string, local?: Song): Promise<Song> {
     }
     else audio[k] = check(await supabase!.storage.from('audio').download(audioPath(uid, id, k))).data!
   }
-  return { id, title: d.title, artist: d.artist, lines: d.lines, trans: d.trans, beat: d.beat, cover: d.cover, bg: d.bg, theme: d.theme, trackId: d.trackId, aliases: d.aliases, audioSrc: d.audioSrc, postId: d.postId, tags: d.tags, status: d.status, fav: d.fav, lists: d.lists, audio, audioRev: d.audio, updated: row.updated }
+  return { id, title: d.title, artist: d.artist, lines: d.lines, trans: d.trans, noReading: d.noReading, noTrans: d.noTrans, beat: d.beat, cover: d.cover, bg: d.bg, theme: d.theme, trackId: d.trackId, aliases: d.aliases, audioSrc: d.audioSrc, postId: d.postId, tags: d.tags, status: d.status, fav: d.fav, lists: d.lists, audio, audioRev: d.audio, updated: row.updated }
 }
 
 export async function syncAll() {

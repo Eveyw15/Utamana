@@ -632,6 +632,8 @@ export default function App() {
   // Practising a community post without copying it: only while that post's song is the one open, so opening any
   // library song (drawer, sync, ...) ends it by itself.
   const listening = listenPost && song?.id === `listen:${listenPost.id}` ? listenPost : null
+  // What the lyric lines show: the user's display chips, minus what this song has switched off (English / Chinese songs).
+  const shown = { kana: show.kana && !song?.noReading, romaji: show.romaji && !song?.noReading, trans: show.trans && !song?.noTrans }
   const allArtists = [...new Set(songs.map((s) => s.artist).filter(Boolean))].sort()
   const qPos = queue && queue.ids.indexOf(song.id)
   const tracks = player.source.tracks
@@ -986,7 +988,7 @@ export default function App() {
         </>
       )}
       <div className="chips">
-        {(['kana', 'romaji', 'trans'] as const).map((k) => (
+        {(['kana', 'romaji', 'trans'] as const).filter((k) => (k === 'trans' ? !song.noTrans : !song.noReading)).map((k) => (
           <button key={k} className={`chip ${show[k] ? 'on' : ''}`} onClick={() => setShow({ ...show, [k]: !show[k] })}>
             {{ kana: '假名', romaji: '罗马音', trans: '翻译' }[k]}
           </button>
@@ -1305,6 +1307,15 @@ export default function App() {
       {editTab === 'lyrics' && (
         <div className="pane box">
           <div className="chips">
+            <span className="hint">这首歌要：</span>
+            <button className={`chip ${!song.noReading ? 'on' : ''}`} title="日语歌才需要；英语、中文歌可以关掉" onClick={() => update({ noReading: !song.noReading || undefined })}>
+              假名和罗马音
+            </button>
+            <button className={`chip ${!song.noTrans ? 'on' : ''}`} title="中文歌可以关掉" onClick={() => update({ noTrans: !song.noTrans || undefined })}>
+              翻译
+            </button>
+          </div>
+          <div className="chips">
             <button className={`chip ${lyricFind ? 'on' : ''}`} onClick={openLyricFind}>
               联网搜索歌词
             </button>
@@ -1423,7 +1434,7 @@ export default function App() {
     <div className={`app ${tab}`}>
       <Backdrop image={lookImage} theme={themeFor(look)} mode={tab === 'practice' ? 'practice' : 'page'} playing={player.playing} pulse={pulse} />
       <header className="no-print">
-        {tab !== 'library' && (
+        {tab !== 'library' && tab !== 'community' && (
           <button className="back" title="返回曲库" onClick={() => goTab('library')}>
             ‹
           </button>
@@ -1432,6 +1443,16 @@ export default function App() {
           うたまな<small>Utamana</small>
         </button>
         <span className="grow" />
+        {communityOn && (tab === 'library' || tab === 'community') && (
+          <nav>
+            <button className={tab === 'library' ? 'on' : ''} onClick={() => tab !== 'library' && goTab('library')}>
+              曲库
+            </button>
+            <button className={tab === 'community' ? 'on' : ''} onClick={() => tab !== 'community' && goTab('community')}>
+              社区
+            </button>
+          </nav>
+        )}
         {tab === 'practice' && (
           <nav>
             <button className={!editing ? 'on' : ''} onClick={() => editing && transition(() => setEditing(false))}>
@@ -1452,11 +1473,6 @@ export default function App() {
           <span className={`sync ${syncState}`} title={syncState === 'error' ? syncError : undefined}>
             {{ idle: '已同步', syncing: '同步中…', error: `同步失败：${syncError}` }[syncState]}
           </span>
-        )}
-        {communityOn && (
-          <button className={`chip ${tab === 'community' ? 'on' : ''}`} title="社区" onClick={() => goTab(tab === 'community' ? 'library' : 'community')}>
-            社区
-          </button>
         )}
         <button className={`avatar-btn ${tab === 'profile' ? 'on' : ''}`} title="个人主页" onClick={() => goTab(tab === 'profile' ? 'library' : 'profile')}>
           <Avatar profile={profile} email={user} />
@@ -1646,7 +1662,7 @@ export default function App() {
                       className={[!l.text && 'gap', i === active && 'active', i === nextSync && 'next', inLoop(i) && 'in-loop'].filter(Boolean).join(' ')}
                       onClick={() => lineEdit?.i !== i && l.time != null && syncAt == null && clickLine(i, l.time)}
                     >
-                      {l.text && <LyricLine a={annotated[i]} trans={song.trans?.[all.slice(0, i).filter((x) => x.text).length]} show={show} onRuby={(s) => editReading(i, s)} />}
+                      {l.text && <LyricLine a={annotated[i]} trans={song.trans?.[all.slice(0, i).filter((x) => x.text).length]} show={shown} onRuby={(s) => editReading(i, s)} />}
                       {l.text && (
                         <button className="edit-line no-print" title="修改这句歌词" onClick={(e) => (e.stopPropagation(), editLine(i))}>
                           ✎

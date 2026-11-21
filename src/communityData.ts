@@ -55,6 +55,8 @@ export function copyFromPost(post: Pick<PostRow, 'id' | 'data' | 'tracks'>, newI
     artist: String(d.artist ?? ''),
     lines: Array.isArray(d.lines) ? d.lines : [],
     trans: Array.isArray(d.trans) ? d.trans : undefined,
+    noReading: d.noReading === true || undefined,
+    noTrans: d.noTrans === true || undefined,
     beat: Array.isArray(d.beat) ? d.beat : undefined,
     cover: d.cover,
     bg: d.bg,

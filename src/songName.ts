@@ -40,3 +40,14 @@ export function searchText(parts: string[]) {
 export function queryKeys(q: string) {
   return [...new Set([normalizeName(q), readingKey(q)])].filter(Boolean)
 }
+
+// Defaults for a song's extras from its lyrics: kana / romaji only make sense for Japanese (has kana), and a
+// Chinese translation is pointless for lyrics that are already Chinese (Han characters but no kana).
+// Empty lyrics keep everything on.
+export function guessExtras(text: string) {
+  const kana = /[ぁ-ゖァ-ヺ]/.test(text)
+  const han = /[一-鿿]/.test(text)
+  const latin = /[a-z]/i.test(text)
+  if (!kana && !han && !latin) return { noReading: false, noTrans: false }
+  return { noReading: !kana, noTrans: !kana && han }
+}
