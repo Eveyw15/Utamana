@@ -25,3 +25,5 @@ dist-ssr
 
 public/dict
 public/kuromoji.js
+
+.superpowers/

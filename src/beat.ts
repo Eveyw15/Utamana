@@ -60,3 +60,11 @@ export function clickSample(sound: ClickSound, accent: boolean, t: number) {
   const [f, decay] = sound === 'wood' ? [accent ? 1200 : 850, 110] : [accent ? 1760 : 1320, 60]
   return Math.sin(2 * Math.PI * f * t) * Math.exp(-t * decay) * (accent ? 1 : 0.7)
 }
+
+// Where in the current beat `t` falls (0 = on the beat, approaching 1 = just before the next), for visuals
+// that follow the metronome. null before the first section or in a silent (BPM 0) section.
+export function beatPhase(sections: Section[], t: number): number | null {
+  const s = [...sections].sort((a, b) => a.time - b.time).filter((x) => x.time <= t).at(-1)
+  if (!s || !(s.bpm > 0)) return null
+  return (((t - s.time) * s.bpm) / 60) % 1
+}

@@ -11,6 +11,8 @@ export type Song = {
   trans?: string[] // one per non-empty lyric line
   beat?: Section[] // metronome sections, see beat.ts
   cover?: string // album cover, small JPEG data URL (see cover.ts)
+  bg?: string // uploaded background image, large JPEG data URL; replaces the cover as the page background
+  theme?: string // default theme name (theme.ts) used when there is no cover
   tags?: string[] // the user's own labels: genre, series / IP, ...
   status?: 'want' | 'learning' | 'learned'
   fav?: boolean
@@ -21,7 +23,7 @@ export type Song = {
 }
 
 // Summary kept in the index so the library page does not load every song's audio.
-export type SongMeta = Pick<Song, 'id' | 'title' | 'artist' | 'updated' | 'cover' | 'tags' | 'status' | 'fav' | 'lists'> & {
+export type SongMeta = Pick<Song, 'id' | 'title' | 'artist' | 'updated' | 'cover' | 'theme' | 'tags' | 'status' | 'fav' | 'lists'> & {
   first?: string
   lines?: number
   tracks?: number
@@ -39,6 +41,7 @@ function summary(s: Song): SongMeta {
     artist: s.artist,
     updated: s.updated,
     cover: s.cover,
+    theme: s.theme,
     tags: s.tags,
     status: s.status,
     fav: s.fav,
