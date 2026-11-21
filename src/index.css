@@ -529,3 +529,35 @@ button:active:not(:disabled) { transform: scale(.96); }
 .shared-hit .art { width: 40px; flex: none; border-radius: 6px; }
 .shared-hit span { display: grid; }
 .shared-hit small { font-size: 12px; color: var(--muted); }
+/* Print dialog: options on the left, a live A4 preview on the right. The page is laid out at real size
+   (794 px = A4 width at 96 dpi) and zoomed down, so the preview matches the print exactly. */
+.print-box { width: min(980px, 100%); height: min(86vh, 900px); display: grid; grid-template-columns: 240px 1fr; gap: 18px; padding: 18px; }
+.print-opts { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.print-opts .seg { display: flex; flex-wrap: wrap; }
+.print-opts .seg button { flex: 1; }
+.print-opts .grow { flex: 1; }
+.print-preview { min-height: 0; overflow: auto; border-radius: 10px; background: rgba(0, 0, 0, .25); padding: 18px; }
+.paper { zoom: .55; width: 794px; min-height: 1123px; margin: 0 auto; padding: 72px 76px; background: #fff; color: #000; box-shadow: 0 6px 30px rgba(0, 0, 0, .35); --rt: #444; --trans: #333; --muted: #444; }
+.paper h1 { font-size: 24px; text-align: center; margin: 0 0 22px; }
+.paper h1 small { display: block; margin-top: 4px; font-size: 14px; font-weight: normal; }
+.paper ol { list-style: none; margin: 0; padding: 0; }
+.paper li { break-inside: avoid; padding: 2px 0; }
+.paper li.gap { height: 14px; }
+.paper .jp { font-size: 16px; line-height: 2; font-weight: 500; color: #000; }
+.paper .romaji { font-size: 11px; color: #444; }
+.paper .trans { font-size: 12px; color: #333; }
+.paper.align-center li { text-align: center; }
+.paper.align-block ol { width: fit-content; max-width: 100%; margin: 0 auto; }
+.paper.cols-2 ol { columns: 2; column-gap: 40px; width: auto; }
+@media (max-width: 900px) {
+  .print-box { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: 92vh; }
+  .paper { zoom: .4; }
+}
+@media print {
+  :root.print-paper .app > :not(.print-dialog) { display: none !important; }
+  :root.print-paper .print-dialog { position: static; display: block; padding: 0; background: none; animation: none; }
+  :root.print-paper .print-box { display: block; width: auto; height: auto; padding: 0; background: none; border: 0; box-shadow: none; }
+  :root.print-paper .print-opts { display: none; }
+  :root.print-paper .print-preview { overflow: visible; padding: 0; background: none; }
+  :root.print-paper .paper { zoom: 1; width: auto; min-height: 0; padding: 0; box-shadow: none; }
+}

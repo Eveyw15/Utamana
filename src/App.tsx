@@ -88,6 +88,111 @@ function LyricLine({ a, trans, show, onRuby }: LineProps) {
   )
 }
 
+type PrintOpts = Show & { align: 'center' | 'block'; cols: 1 | 2 }
+
+function loadPrintOpts(): PrintOpts {
+  const base: PrintOpts = { align: 'block', cols: 1, kana: true, romaji: false, trans: true }
+  try {
+    return { ...base, ...JSON.parse(localStorage.getItem('utamana:print') ?? '{}') }
+  } catch {
+    return base
+  }
+}
+
+// Print settings with a live preview: the white page on the right is exactly what gets printed (the print CSS
+// hides everything else), so changing a choice shows the result at once.
+function PrintDialog({ song, annotated, onClose }: { song: Song; annotated: Annotated[]; onClose: () => void }) {
+  const [o, setO] = useState(loadPrintOpts)
+  const set = (patch: Partial<PrintOpts>) =>
+    setO((prev) => {
+      const next = { ...prev, ...patch }
+      try {
+        localStorage.setItem('utamana:print', JSON.stringify(next))
+      } catch {
+        // Storage blocked: the choice lasts for this dialog only.
+      }
+      return next
+    })
+  const show = { kana: o.kana && !song.noReading, romaji: o.romaji && !song.noReading, trans: o.trans && !song.noTrans }
+  const extras = (['kana', 'romaji', 'trans'] as const).filter((k) => (k === 'trans' ? !song.noTrans : !song.noReading))
+
+  function print() {
+    document.documentElement.classList.add('print-paper')
+    const done = () => document.documentElement.classList.remove('print-paper')
+    window.addEventListener('afterprint', done, { once: true })
+    window.print()
+  }
+
+  let n = -1 // index among non-empty lines, which is how translations are stored
+  return (
+    <div className="modal print-dialog" onClick={onClose}>
+      <div className="box print-box" onClick={(e) => e.stopPropagation()}>
+        <aside className="print-opts">
+          <div className="panel-head">
+            <b>导出 PDF</b>
+            <button className="icon" title="关闭" onClick={onClose}>
+              ✕
+            </button>
+          </div>
+          <span className="hint">对齐</span>
+          <div className="seg">
+            <button className={o.align === 'center' ? 'on' : ''} onClick={() => set({ align: 'center' })}>
+              每行居中
+            </button>
+            <button className={o.align === 'block' ? 'on' : ''} onClick={() => set({ align: 'block' })}>
+              整体居中、行居左
+            </button>
+          </div>
+          <span className="hint">分栏</span>
+          <div className="seg">
+            {([1, 2] as const).map((c) => (
+              <button key={c} className={o.cols === c ? 'on' : ''} onClick={() => set({ cols: c })}>
+                {c === 1 ? '一列' : '两列'}
+              </button>
+            ))}
+          </div>
+          {extras.length > 0 && (
+            <>
+              <span className="hint">显示</span>
+              <div className="chips">
+                {extras.map((k) => (
+                  <button key={k} className={`chip ${o[k] ? 'on' : ''}`} onClick={() => set({ [k]: !o[k] })}>
+                    {{ kana: '假名', romaji: '罗马音', trans: '翻译' }[k]}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          <span className="grow" />
+          <button className="primary" onClick={print}>
+            导出 PDF
+          </button>
+          <p className="hint">会打开浏览器的打印窗口：「目标打印机」选「另存为 PDF」，再点保存。也可以直接打印。</p>
+        </aside>
+        <div className="print-preview">
+          <article className={`paper align-${o.align} cols-${o.cols}`}>
+            <h1 lang="ja">
+              {song.title}
+              {song.artist && <small>{song.artist}</small>}
+            </h1>
+            <ol>
+              {song.lines.map((l, i) => {
+                if (!l.text) return <li key={i} className="gap" />
+                n++
+                return (
+                  <li key={i}>
+                    <LyricLine a={annotated[i]} trans={song.trans?.[n]} show={show} onRuby={() => {}} />
+                  </li>
+                )
+              })}
+            </ol>
+          </article>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function FontPicker({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   const custom = !FONTS.some((f) => f.css === value)
   return (
@@ -114,6 +219,7 @@ export default function App() {
   const [communityGroup, setCommunityGroup] = useState<string | null>(null) // open this song on the community page
   const [listenPost, setListening] = useState<Post | null>(null) // last community post opened to try out
   const [publishing, setPublishing] = useState(false)
+  const [printOpen, setPrintOpen] = useState(false)
   const [profile, setProfile] = useState<ProfileInfo>(() => {
     try {
       return JSON.parse(localStorage.getItem('utamana:profile') ?? '{}')
@@ -1002,8 +1108,8 @@ export default function App() {
         </div>
       )}
       {!hasAudio && (
-        <button className="chip" onClick={() => window.print()}>
-          打印 / PDF
+        <button className="chip" onClick={() => setPrintOpen(true)}>
+          导出 PDF
         </button>
       )}
     </div>
@@ -1126,8 +1232,8 @@ export default function App() {
               撤销校准
             </button>
           )}
-          <button className="chip" onClick={() => window.print()}>
-            打印 / PDF
+          <button className="chip" onClick={() => setPrintOpen(true)}>
+            导出 PDF
           </button>
         </div>
         {syncAt != null && <p className="hint">每句开始唱时按空格，按退格回到上一句</p>}
@@ -1702,6 +1808,7 @@ export default function App() {
         </main>
       )}
 
+      {tab === 'practice' && printOpen && song && <PrintDialog song={song} annotated={annotated} onClose={() => setPrintOpen(false)} />}
       {tab === 'practice' && !editing && pop === 'sync' && syncPanel}
       {tab === 'practice' && !editing && drawerPanel}
     </div>
