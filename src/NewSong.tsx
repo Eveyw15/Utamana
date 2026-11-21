@@ -5,6 +5,7 @@ import type { Song } from './db'
 import { parseLyrics } from './lrc'
 import { TRACK_LABEL, type TrackKey } from './player'
 import { LyricsSearch } from './LyricsSearch'
+import { search as searchCommunity, type GroupCard } from './communityApi'
 
 const TRACKS: TrackKey[] = ['original', 'vocals', 'instrumental']
 
@@ -14,11 +15,14 @@ type Props = {
   draft: MutableRefObject<Song | null>
   onDone: (song: Song) => void
   onCancel: () => void
+  // Signed in with the community available: step 2 first shows songs others already made.
+  onCommunity?: (groupId: string) => void
 }
 
 // New song in three steps: lyrics (required), pick the song from an online search (title, artist and cover in
 // one click), audio (optional).
-export function NewSong({ artists, draft, onDone, onCancel }: Props) {
+export function NewSong({ artists, draft, onDone, onCancel, onCommunity }: Props) {
+  const [shared, setShared] = useState<GroupCard[]>([])
   const [id] = useState(() => crypto.randomUUID())
   const [step, setStep] = useState(1)
   const [text, setText] = useState('')
@@ -45,6 +49,7 @@ export function NewSong({ artists, draft, onDone, onCancel }: Props) {
     if (!q.trim()) return
     setBusy(true)
     try {
+      if (onCommunity) void searchCommunity(q.trim()).then(setShared, () => setShared([]))
       setHits(await searchCovers(q.trim()))
     } catch {
       setHits([])
@@ -164,6 +169,25 @@ export function NewSong({ artists, draft, onDone, onCancel }: Props) {
                     <option key={a} value={a} />
                   ))}
                 </datalist>
+              </div>
+            )}
+            {shared.length > 0 && (
+              <div className="shared-hits">
+                <p className="hint">社区里已经有人做好了，直接加入就不用自己打点：</p>
+                <div className="chips">
+                  {shared.slice(0, 6).map((g) => (
+                    <button key={g.id} className="shared-hit" onClick={() => onCommunity!(g.id)}>
+                      <Art song={{ id: g.id, title: g.title, cover: g.cover ?? undefined }} />
+                      <span>
+                        <b lang="ja">{g.title}</b>
+                        <small>
+                          {g.artist}
+                          {g.posts > 1 ? ` · ${g.posts} 份` : ''}
+                        </small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             <div className="cover-hits">

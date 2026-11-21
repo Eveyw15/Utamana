@@ -276,7 +276,7 @@ export function Library({ songs, currentId, onOpen, onEdit, onNew, onPatch, onDe
 
 // A row of records that scrolls sideways; ‹ › page through it (the scrollbar is hidden and a mouse wheel
 // only scrolls vertically), each shown only while there is more in that direction.
-function Shelf({ title, count, children }: { title: string; count: number; children: ReactNode }) {
+export function Shelf({ title, count, children }: { title: string; count: number; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
   const [more, setMore] = useState({ left: false, right: false })
   const measure = () => {

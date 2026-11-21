@@ -16,6 +16,9 @@ import { Backdrop } from './Backdrop'
 import { Art } from './Art'
 import { ChipsPicker } from './ChipsPicker'
 import { Library } from './Library'
+import { Community } from './Community'
+import { communityReady, copyToLibrary, postAudio, publish, withdraw, type Post } from './communityApi'
+import { copyFromPost } from './communityData'
 import { NewSong } from './NewSong'
 import { AuthPage } from './AuthPage'
 import { LyricsSearch } from './LyricsSearch'
@@ -106,7 +109,11 @@ function FontPicker({ label, value, onChange }: { label: string; value: string; 
 export default function App() {
   const [songs, setSongs] = useState<SongMeta[]>([])
   const [song, setSong] = useState<Song | null>(null)
-  const [tab, setTab] = useState<'library' | 'practice' | 'settings' | 'new' | 'profile'>('library')
+  const [tab, setTab] = useState<'library' | 'practice' | 'settings' | 'new' | 'profile' | 'community'>('library')
+  const [communityOn, setCommunityOn] = useState(false) // signed in and the community SQL has been run
+  const [communityGroup, setCommunityGroup] = useState<string | null>(null) // open this song on the community page
+  const [listening, setListening] = useState<Post | null>(null) // practising a community post without copying it
+  const [publishing, setPublishing] = useState(false)
   const [profile, setProfile] = useState<ProfileInfo>(() => {
     try {
       return JSON.parse(localStorage.getItem('utamana:profile') ?? '{}')
@@ -251,6 +258,7 @@ export default function App() {
 
   async function openSaved(id: string, edit = false) {
     markOpened(id)
+    setListening(null)
     const s = (await loadSong(id))!
     transition(() => {
       setEditTab('lyrics')
@@ -271,8 +279,57 @@ export default function App() {
       setEditing(false)
       setCoverPop(false)
       setHovered(null)
+      if (t !== 'practice') setListening(null)
+      if (t !== 'community') setCommunityGroup(null)
       setTab(t)
     })
+  }
+
+  // Community: try a post out (read-only, nothing saved), copy it into the library, publish / withdraw your own.
+  async function listen(post: Post) {
+    try {
+      const s = { ...copyFromPost(post, `listen:${post.id}`), audio: await postAudio(post) }
+      transition(() => {
+        setEditing(false)
+        setListening(post)
+        setTab('practice')
+        void open(s)
+      })
+    } catch (e) {
+      alert(`音频下载失败：${e instanceof Error ? e.message : e}`)
+    }
+  }
+
+  async function copyPost(post: Post) {
+    const s = await copyToLibrary(post)
+    setSongs(await listSongs())
+    queuePush(s)
+    await openSaved(s.id)
+  }
+
+  async function publishSong() {
+    if (!song) return
+    if (!song.postId && !confirm('发布后，所有登录用户都能看到并复制这首歌（歌词、节拍、翻译和音频）。你的标签、学习状态、收藏和歌单不会公开。继续？')) return
+    setPublishing(true)
+    try {
+      const postId = await publish(song, { name: profile.nickname ?? user ?? undefined, avatar: profile.avatar }, player.duration || undefined)
+      if (postId !== song.postId) await update({ postId })
+      alert(song.postId ? '已更新社区里的版本。' : '已发布到社区。')
+    } catch (e) {
+      alert(`发布失败：${e instanceof Error ? e.message : e}`)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  async function withdrawSong() {
+    if (!song?.postId || !confirm('从社区撤回？已经复制的人不受影响。')) return
+    try {
+      await withdraw(song.postId)
+      await update({ postId: undefined })
+    } catch (e) {
+      alert(`撤回失败：${e instanceof Error ? e.message : e}`)
+    }
   }
 
   async function saveNew(s: Song, practice = true) {
@@ -317,6 +374,7 @@ export default function App() {
     if (!song) return
     const next = { ...song, ...patch }
     setSong(next)
+    if (listening) return // a community post being tried out is not in the library: nothing to save
     await saveSong(next)
     setSongs(await listSongs())
     queuePush(next)
@@ -418,6 +476,11 @@ export default function App() {
     const id = setInterval(() => player.playing && logPractice(5), 5000)
     return () => clearInterval(id)
   }, [])
+
+  // The community entry shows only when signed in and the community tables exist.
+  useEffect(() => {
+    void communityReady().then(setCommunityOn)
+  }, [user])
 
   // Nickname / avatar: the signed-in account's metadata wins (so it follows you between devices).
   useEffect(() => {
@@ -1213,6 +1276,18 @@ export default function App() {
         </div>
         <span className="grow" />
         <span className="hint">{savedAt ? `已自动保存 ${new Date(savedAt).toLocaleTimeString()}` : '修改会自动保存'}</span>
+        {communityOn && (
+          <>
+            <button className="chip" disabled={publishing} title="把这首歌的快照发布到社区；之后的修改要再点一次才会更新" onClick={publishSong}>
+              {publishing ? '发布中…' : song.postId ? '更新发布' : '发布到社区'}
+            </button>
+            {song.postId && (
+              <button className="chip" disabled={publishing} onClick={withdrawSong}>
+                撤回
+              </button>
+            )}
+          </>
+        )}
         <button onClick={saveNow}>保存</button>
         <button className="primary" onClick={() => transition(() => setEditing(false))}>
           完成
@@ -1353,15 +1428,26 @@ export default function App() {
             <button className={!editing ? 'on' : ''} onClick={() => editing && transition(() => setEditing(false))}>
               练习
             </button>
-            <button className={editing ? 'on' : ''} onClick={() => !editing && startEdit()}>
-              编辑
-            </button>
+            {listening ? (
+              <button className="on" disabled={publishing} onClick={() => copyPost(listening).catch((e) => alert(`加入失败：${e instanceof Error ? e.message : e}`))}>
+                试听中 · 加入我的曲库
+              </button>
+            ) : (
+              <button className={editing ? 'on' : ''} onClick={() => !editing && startEdit()}>
+                编辑
+              </button>
+            )}
           </nav>
         )}
         {user && (
           <span className={`sync ${syncState}`} title={syncState === 'error' ? syncError : undefined}>
             {{ idle: '已同步', syncing: '同步中…', error: `同步失败：${syncError}` }[syncState]}
           </span>
+        )}
+        {communityOn && (
+          <button className={`chip ${tab === 'community' ? 'on' : ''}`} title="社区" onClick={() => goTab(tab === 'community' ? 'library' : 'community')}>
+            社区
+          </button>
         )}
         <button className={`avatar-btn ${tab === 'profile' ? 'on' : ''}`} title="个人主页" onClick={() => goTab(tab === 'profile' ? 'library' : 'profile')}>
           <Avatar profile={profile} email={user} />
@@ -1460,7 +1546,17 @@ export default function App() {
         />
       )}
 
-      {tab === 'new' && <NewSong artists={allArtists} draft={newDraft} onDone={(s) => saveNew(s)} onCancel={() => goTab('library')} />}
+      {tab === 'community' && <Community initialGroup={communityGroup} onListen={listen} onCopy={copyPost} />}
+
+      {tab === 'new' && (
+        <NewSong
+          artists={allArtists}
+          draft={newDraft}
+          onDone={(s) => saveNew(s)}
+          onCancel={() => goTab('library')}
+          onCommunity={communityOn ? (g) => (setCommunityGroup(g), void goTab('community')) : undefined}
+        />
+      )}
 
       {tab === 'practice' && (
         <main className={`stage ${editing ? 'editing' : ''}`} onClick={() => coverPop && setCoverPop(false)}>

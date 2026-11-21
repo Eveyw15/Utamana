@@ -28,7 +28,7 @@ export type GroupCard = { id: string; featured: string | null; post: string; tit
 
 const POST_COLUMNS = 'id, user_id, author_name, author_avatar, group_id, title, artist, cover, data, tracks, copies, hidden, created, updated'
 
-async function uid() {
+export async function uid() {
   return supabase ? (await supabase.auth.getSession()).data.session?.user.id : undefined
 }
 
