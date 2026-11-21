@@ -32,16 +32,11 @@ export function AuthPage({ supabase, onSkip }: Props) {
 
   return (
     <main className="auth no-print">
-      {/* Macaron colour blobs drifting behind the card, plus a few slow-floating notes. */}
+      {/* Three muted (Morandi) colours slowly drifting behind the card. */}
       <div className="auth-bg" aria-hidden>
         <i />
         <i />
         <i />
-        <i />
-        <i />
-        {['♪', '♫', '♩', '♬', '♪', '♫'].map((n, k) => (
-          <b key={k}>{n}</b>
-        ))}
       </div>
       <form className="box auth-card" onSubmit={submit}>
         <div className="auth-logo">

@@ -422,40 +422,30 @@ button:active:not(:disabled) { transform: scale(.96); }
 .edit-list + .primary { margin-left: 0; }
 @media (max-width: 900px) { .pl-cols { grid-template-columns: 1fr; } }
 .login { display: grid; gap: 8px; width: min(340px, 100%); }
-/* Sign-in page: bright macaron colours drifting behind a frosted card. */
-.auth-screen { background: #2a2140; }
+/* Sign-in page: three Morandi colours drifting behind a frosted card. */
+.auth-screen { background: #d9d4cf; }
 .auth { position: relative; min-height: 100dvh; display: grid; place-items: center; padding: 24px; overflow: hidden; isolation: isolate; }
-.auth-bg { position: fixed; inset: 0; z-index: -1; overflow: hidden; background: linear-gradient(135deg, #f7b9c6, #c9b8ec 45%, #a9d1f0); }
-.auth-bg i { position: absolute; width: 55vmax; aspect-ratio: 1; border-radius: 50%; filter: blur(60px); opacity: .85; animation: blob 18s ease-in-out infinite alternate; }
-.auth-bg i:nth-child(1) { background: #ff9fb6; left: -15vmax; top: -20vmax; }
-.auth-bg i:nth-child(2) { background: #9fe3c6; right: -18vmax; top: -10vmax; animation-duration: 22s; }
-.auth-bg i:nth-child(3) { background: #ffe08a; left: 20vmax; bottom: -30vmax; animation-duration: 26s; }
-.auth-bg i:nth-child(4) { background: #b79cff; right: -10vmax; bottom: -25vmax; animation-duration: 20s; }
-.auth-bg i:nth-child(5) { background: #8fd0ff; left: -20vmax; bottom: -10vmax; width: 40vmax; animation-duration: 24s; }
-@keyframes blob { 0% { transform: translate(0, 0) scale(1); } 50% { transform: translate(8vmax, 6vmax) scale(1.15); } 100% { transform: translate(-6vmax, 10vmax) scale(.95); } }
-.auth-bg b { position: absolute; bottom: -10vh; color: rgba(255, 255, 255, .75); font-size: 28px; text-shadow: 0 2px 12px rgba(120, 80, 160, .35); animation: float 14s linear infinite; }
-.auth-bg b:nth-of-type(1) { left: 12%; animation-delay: -2s; }
-.auth-bg b:nth-of-type(2) { left: 28%; font-size: 22px; animation-delay: -9s; animation-duration: 17s; }
-.auth-bg b:nth-of-type(3) { left: 47%; font-size: 34px; animation-delay: -5s; }
-.auth-bg b:nth-of-type(4) { left: 66%; animation-delay: -12s; animation-duration: 19s; }
-.auth-bg b:nth-of-type(5) { left: 80%; font-size: 20px; animation-delay: -7s; }
-.auth-bg b:nth-of-type(6) { left: 92%; font-size: 30px; animation-delay: -1s; animation-duration: 16s; }
-@keyframes float { from { transform: translateY(0) rotate(-10deg); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } to { transform: translateY(-120vh) rotate(15deg); opacity: 0; } }
-.auth-card { width: min(390px, 100%); display: grid; gap: 12px; padding: 30px 28px 22px; color: #3b2f4f; border-radius: 24px;
-  background: rgba(255, 255, 255, .55); border: 1px solid rgba(255, 255, 255, .7); -webkit-backdrop-filter: blur(24px) saturate(1.4); backdrop-filter: blur(24px) saturate(1.4);
-  box-shadow: 0 20px 60px rgba(110, 70, 150, .25); animation: rise .5s cubic-bezier(.2, .8, .2, 1) both; }
-.auth-card .hint { color: #6d5f80; }
+.auth-bg { position: fixed; inset: 0; z-index: -1; overflow: hidden; background: #d8d2cc; }
+.auth-bg i { position: absolute; width: 65vmax; aspect-ratio: 1; border-radius: 50%; filter: blur(70px); opacity: .9; animation: blob 24s ease-in-out infinite alternate; }
+.auth-bg i:nth-child(1) { background: #c9a9a4; left: -20vmax; top: -25vmax; }
+.auth-bg i:nth-child(2) { background: #9fb0bf; right: -22vmax; top: 0; animation-duration: 28s; }
+.auth-bg i:nth-child(3) { background: #a9b5a0; left: 5vmax; bottom: -35vmax; animation-duration: 32s; }
+@keyframes blob { 0% { transform: translate(0, 0) scale(1); } 50% { transform: translate(6vmax, 4vmax) scale(1.1); } 100% { transform: translate(-4vmax, 8vmax) scale(.95); } }
+.auth-card { width: min(390px, 100%); display: grid; gap: 12px; padding: 30px 28px 22px; color: #3f3a3a; border-radius: 24px;
+  background: rgba(255, 255, 255, .5); border: 1px solid rgba(255, 255, 255, .65); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px);
+  box-shadow: 0 20px 60px rgba(80, 70, 70, .18); animation: rise .5s cubic-bezier(.2, .8, .2, 1) both; }
+.auth-card .hint { color: #6f6866; }
 .auth-logo { display: grid; gap: 2px; }
-.auth-logo span { font-size: 34px; font-weight: 800; letter-spacing: .05em; background: linear-gradient(90deg, #ff6f9a, #a879ff, #4fb3ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.auth-logo small { font-size: 12px; font-weight: 500; color: #7a6c8c; letter-spacing: .08em; }
-.auth-card .seg { width: 100%; background: rgba(255, 255, 255, .5); }
-.auth-card .seg button { flex: 1; color: #6d5f80; }
-.auth-card .seg button.on { background: #fff; color: #3b2f4f; box-shadow: 0 2px 8px rgba(110, 70, 150, .15); }
-.auth-card input { width: 100%; padding: 10px 14px; color: #3b2f4f; background: rgba(255, 255, 255, .7); border-color: rgba(255, 255, 255, .9); }
-.auth-card input::placeholder { color: #9a8fab; }
-.auth-card input:focus { outline: 2px solid #c9b8ec; }
-.auth-card .primary { padding: 10px; border: 0; color: #fff; background: linear-gradient(90deg, #ff7fa3, #a879ff); box-shadow: 0 8px 20px rgba(168, 121, 255, .35); }
-.auth-card .primary:hover:not(:disabled) { background: linear-gradient(90deg, #ff6f9a, #9a68ff); }
+.auth-logo span { font-size: 34px; font-weight: 800; letter-spacing: .05em; color: #5f5654; }
+.auth-logo small { font-size: 12px; font-weight: 500; color: #8a807d; letter-spacing: .08em; }
+.auth-card .seg { width: 100%; background: rgba(255, 255, 255, .45); }
+.auth-card .seg button { flex: 1; color: #6f6866; }
+.auth-card .seg button.on { background: #fff; color: #3f3a3a; box-shadow: 0 2px 8px rgba(80, 70, 70, .12); }
+.auth-card input { width: 100%; padding: 10px 14px; color: #3f3a3a; background: rgba(255, 255, 255, .7); border-color: rgba(255, 255, 255, .85); }
+.auth-card input::placeholder { color: #9b928f; }
+.auth-card input:focus { outline: 2px solid #b7a3a8; }
+.auth-card .primary { padding: 10px; border: 0; color: #fff; background: #8a6a66; box-shadow: 0 8px 20px rgba(138, 106, 102, .3); }
+.auth-card .primary:hover:not(:disabled) { background: #7a5c58; }
 .auth-card .primary:disabled { opacity: .5; }
-.auth-card .link { justify-self: center; color: #7a6c8c; }
-@media (prefers-reduced-motion: reduce) { .auth-bg i, .auth-bg b { animation: none; } .auth-bg b { display: none; } }
+.auth-card .link { justify-self: center; color: #8a807d; }
+@media (prefers-reduced-motion: reduce) { .auth-bg i { animation: none; } }
