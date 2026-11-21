@@ -13,6 +13,8 @@ export type Song = {
   cover?: string // album cover, small JPEG data URL (see cover.ts)
   bg?: string // uploaded background image, large JPEG data URL; replaces the cover as the page background
   theme?: string // default theme name (theme.ts) used when there is no cover
+  trackId?: number // Apple Music track id, picked from the cover search: identifies the song across languages
+  aliases?: string[] // the song's names in other storefronts (Chinese / English ...), for community search
   tags?: string[] // the user's own labels: genre, series / IP, ...
   status?: 'want' | 'learning' | 'learned'
   fav?: boolean

@@ -30,13 +30,13 @@ export function NewSong({ artists, draft, onDone, onCancel }: Props) {
   const [title, setTitle] = useState('')
   const [artist, setArtist] = useState('')
   const [cover, setCover] = useState<string>()
-  const [picked, setPicked] = useState<string>()
+  const [picked, setPicked] = useState<CoverHit>()
   const [audio, setAudio] = useState<Song['audio']>({})
   const [audioRev, setAudioRev] = useState<Song['audioRev']>({})
 
   const lines = parseLyrics(text)
   const firstLine = lines.find((l) => l.text)?.text.replace(/\{[^}]*\}/g, '') ?? ''
-  const song: Song = { id, title: title.trim() || fileName || firstLine || '新歌曲', artist: artist.trim(), lines, cover, audio, audioRev, updated: 0 }
+  const song: Song = { id, title: title.trim() || fileName || firstLine || '新歌曲', artist: artist.trim(), lines, cover, trackId: picked?.trackId, aliases: picked?.aliases, audio, audioRev, updated: 0 }
   useEffect(() => {
     draft.current = song
   })
@@ -68,7 +68,7 @@ export function NewSong({ artists, draft, onDone, onCancel }: Props) {
     try {
       setTitle(h.title)
       setArtist(h.artist)
-      setPicked(h.url)
+      setPicked(h)
       setCover(await toCover(h.url))
     } catch {
       setCover(undefined)
@@ -169,7 +169,7 @@ export function NewSong({ artists, draft, onDone, onCancel }: Props) {
             <div className="cover-hits">
               {hits?.length === 0 && <p className="hint">没搜到，改一下搜索词，或者手动填写。</p>}
               {hits?.map((h) => (
-                <button key={h.url} className={picked === h.url ? 'on' : ''} disabled={busy} onClick={() => pick(h)}>
+                <button key={h.trackId} className={picked?.trackId === h.trackId ? 'on' : ''} disabled={busy} onClick={() => pick(h)}>
                   <img src={h.url.replace('600x600bb', '200x200bb')} alt="" />
                   <b>{h.title}</b>
                   <span>{h.artist}</span>

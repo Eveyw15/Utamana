@@ -4,7 +4,7 @@ import { KANJI, annotateLine, setReading, type Annotated, type Seg } from './fur
 import { alignTranslation, fmtTime, parseLyrics, toLrc } from './lrc'
 import { Player, TRACK_LABEL, type TrackKey } from './player'
 import { alignTimes } from './align'
-import { searchCovers, toBackground, toCover, type CoverHit } from './cover'
+import { lookupJp, searchCovers, toBackground, toCover, type CoverHit } from './cover'
 import { CLICK_LABEL, anchorFirst, beatGrid, beatPhase, estimateTempo, parseSections, snapToBeat, tapFit, type ClickSound, type Section } from './beat'
 import { translateLines } from './translate'
 import { FONTS, applyFonts, loadFonts, type FontSettings } from './fonts'
@@ -120,7 +120,7 @@ export default function App() {
   // Inline edit on the practice page: a reading (seg) or the whole line i. Not prompt(): that freezes the page
   // and the audio with it (the mix runs on the main thread), and these edits should not stop the music.
   const [lineEdit, setLineEdit] = useState<{ i: number; seg?: Seg; value: string } | null>(null)
-  const [lyricFind, setLyricFind] = useState(false) // edit mode: online lyrics search open
+  const [lyricFind, setLyricFind] = useState('') // edit mode: online lyrics search open, with this first query
   const [detecting, setDetecting] = useState(false) // auto BPM running
   const autoBeatTried = useRef(new Set<string>()) // songs we already auto-detected a tempo for this visit
   const [hovered, setHovered] = useState<SongMeta | null>(null) // library card under the pointer, tints the background
@@ -618,13 +618,26 @@ export default function App() {
     try {
       const differs = hit && (hit.title !== song!.title || hit.artist !== song!.artist)
       const rename = differs && confirm(`同时把歌名和歌手改成「${hit.title} · ${hit.artist}」吗？`)
-      await update({ cover: await toCover(src), ...(rename ? { title: hit.title, artist: hit.artist } : {}) })
+      await update({
+        cover: await toCover(src),
+        ...(hit ? { trackId: hit.trackId, aliases: hit.aliases } : {}),
+        ...(rename ? { title: hit.title, artist: hit.artist } : {}),
+      })
       setCoverHits(null)
     } catch (e) {
       alert(`封面读取失败：${e}`)
     } finally {
       setCoverBusy(false)
     }
+  }
+
+  // Lyrics search starts from the song's Japanese name when we know its Apple track (a Chinese or English
+  // title rarely finds the lyrics). ' ' keeps the panel open with an empty box.
+  async function openLyricFind() {
+    if (lyricFind) return setLyricFind('')
+    const own = song!.title === '新歌曲' ? '' : song!.title
+    const jp = song!.trackId ? await lookupJp(song!.trackId) : null
+    setLyricFind((jp ? `${jp.title} ${jp.artist}` : `${own} ${song!.artist}`).trim() || ' ')
   }
 
   async function findCovers() {
@@ -1143,7 +1156,7 @@ export default function App() {
         <div className="cover-hits">
           {!coverHits.length && <p className="hint">没搜到，改一下歌名或歌手再搜，或者自己上传。</p>}
           {coverHits.map((h) => (
-            <button key={h.url} title={`${h.title} · ${h.artist}\n${h.album}`} disabled={coverBusy} onClick={() => setCover(h.url, h)}>
+            <button key={h.trackId} title={`${h.title} · ${h.artist}\n${h.album}`} disabled={coverBusy} onClick={() => setCover(h.url, h)}>
               <img src={h.url.replace('600x600bb', '200x200bb')} alt="" />
               <b>{h.title}</b>
               <span>{h.artist}</span>
@@ -1205,7 +1218,7 @@ export default function App() {
       {editTab === 'lyrics' && (
         <div className="pane box">
           <div className="chips">
-            <button className={`chip ${lyricFind ? 'on' : ''}`} onClick={() => setLyricFind(!lyricFind)}>
+            <button className={`chip ${lyricFind ? 'on' : ''}`} onClick={openLyricFind}>
               联网搜索歌词
             </button>
             <label className="button chip">
@@ -1221,13 +1234,13 @@ export default function App() {
           </div>
           {lyricFind && (
             <LyricsSearch
-              initial={`${song.title === '新歌曲' ? '' : song.title} ${song.artist}`.trim()}
+              initial={lyricFind}
               duration={player.duration || undefined}
               onPick={(h) => {
                 if (song.lines.some((l) => l.text) && !confirm(`用「${h.title} · ${h.artist}」的歌词替换现在的歌词？`)) return
                 setDraft(h.text)
                 update({ lines: parseLyrics(h.text) })
-                setLyricFind(false)
+                setLyricFind('')
               }}
             />
           )}
