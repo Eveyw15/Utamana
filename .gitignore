@@ -27,3 +27,7 @@ public/dict
 public/kuromoji.js
 
 .superpowers/
+
+# Community: server rules and design stay out of the public repo
+supabase/community.sql
+docs/private/

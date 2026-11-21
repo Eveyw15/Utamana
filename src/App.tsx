@@ -4,7 +4,7 @@ import { KANJI, annotateLine, setReading, type Annotated, type Seg } from './fur
 import { alignTranslation, fmtTime, parseLyrics, toLrc } from './lrc'
 import { Player, TRACK_LABEL, type TrackKey } from './player'
 import { alignTimes } from './align'
-import { searchCovers, toBackground, toCover, type CoverHit } from './cover'
+import { lookupJp, searchCovers, toBackground, toCover, type CoverHit } from './cover'
 import { CLICK_LABEL, anchorFirst, beatGrid, beatPhase, estimateTempo, parseSections, snapToBeat, tapFit, type ClickSound, type Section } from './beat'
 import { translateLines } from './translate'
 import { FONTS, applyFonts, loadFonts, type FontSettings } from './fonts'
@@ -16,6 +16,9 @@ import { Backdrop } from './Backdrop'
 import { Art } from './Art'
 import { ChipsPicker } from './ChipsPicker'
 import { Library } from './Library'
+import { Community } from './Community'
+import { communityReady, copyToLibrary, postAudio, publish, withdraw, type Post } from './communityApi'
+import { copyFromPost } from './communityData'
 import { NewSong } from './NewSong'
 import { AuthPage } from './AuthPage'
 import { LyricsSearch } from './LyricsSearch'
@@ -106,7 +109,11 @@ function FontPicker({ label, value, onChange }: { label: string; value: string; 
 export default function App() {
   const [songs, setSongs] = useState<SongMeta[]>([])
   const [song, setSong] = useState<Song | null>(null)
-  const [tab, setTab] = useState<'library' | 'practice' | 'settings' | 'new' | 'profile'>('library')
+  const [tab, setTab] = useState<'library' | 'practice' | 'settings' | 'new' | 'profile' | 'community'>('library')
+  const [communityOn, setCommunityOn] = useState(false) // signed in and the community SQL has been run
+  const [communityGroup, setCommunityGroup] = useState<string | null>(null) // open this song on the community page
+  const [listenPost, setListening] = useState<Post | null>(null) // last community post opened to try out
+  const [publishing, setPublishing] = useState(false)
   const [profile, setProfile] = useState<ProfileInfo>(() => {
     try {
       return JSON.parse(localStorage.getItem('utamana:profile') ?? '{}')
@@ -120,7 +127,7 @@ export default function App() {
   // Inline edit on the practice page: a reading (seg) or the whole line i. Not prompt(): that freezes the page
   // and the audio with it (the mix runs on the main thread), and these edits should not stop the music.
   const [lineEdit, setLineEdit] = useState<{ i: number; seg?: Seg; value: string } | null>(null)
-  const [lyricFind, setLyricFind] = useState(false) // edit mode: online lyrics search open
+  const [lyricFind, setLyricFind] = useState('') // edit mode: online lyrics search open, with this first query
   const [detecting, setDetecting] = useState(false) // auto BPM running
   const autoBeatTried = useRef(new Set<string>()) // songs we already auto-detected a tempo for this visit
   const [hovered, setHovered] = useState<SongMeta | null>(null) // library card under the pointer, tints the background
@@ -211,7 +218,7 @@ export default function App() {
       const list = await listSongs()
       setSongs(list)
       // Fresh device: the unsaved blank song is showing, jump to the synced library (not while filling in a new song).
-      if (list[0] && tabRef.current !== 'new' && !list.some((s) => s.id === songRef.current?.id)) await openSaved(list[0].id)
+      if (list[0] && tabRef.current !== 'new' && !songRef.current?.id.startsWith('listen:') && !list.some((s) => s.id === songRef.current?.id)) await openSaved(list[0].id)
       setSyncState('idle')
     } catch (e) {
       syncFailed(e)
@@ -251,6 +258,7 @@ export default function App() {
 
   async function openSaved(id: string, edit = false) {
     markOpened(id)
+    setListening(null)
     const s = (await loadSong(id))!
     transition(() => {
       setEditTab('lyrics')
@@ -271,8 +279,63 @@ export default function App() {
       setEditing(false)
       setCoverPop(false)
       setHovered(null)
+      if (t !== 'practice') setListening(null)
+      if (t !== 'community') setCommunityGroup(null)
       setTab(t)
     })
+  }
+
+  // Community: try a post out (read-only, nothing saved), copy it into the library, publish / withdraw your own.
+  async function listen(post: Post) {
+    try {
+      const s = { ...copyFromPost(post, `listen:${post.id}`), audio: await postAudio(post) }
+      transition(() => {
+        setEditing(false)
+        setListening(post)
+        setTab('practice')
+        void open(s)
+      })
+    } catch (e) {
+      alert(`音频下载失败：${e instanceof Error ? e.message : e}`)
+    }
+  }
+
+  async function copyPost(post: Post) {
+    const s = await copyToLibrary(post)
+    setSongs(await listSongs())
+    queuePush(s)
+    await openSaved(s.id)
+  }
+
+  async function publishSong() {
+    if (!song) return
+    if (!song.postId && !confirm('发布后，所有登录用户都能看到并复制这首歌（歌词、节拍、翻译和音频）。你的标签、学习状态、收藏和歌单不会公开。继续？')) return
+    setPublishing(true)
+    try {
+      const postId = await publish(song, { name: profile.nickname ?? user ?? undefined, avatar: profile.avatar }, player.duration || undefined)
+      // Patch the latest saved copy: the user may have kept editing while the audio uploaded.
+      const cur = await loadSong(song.id)
+      if (cur && cur.postId !== postId) {
+        await saveSong({ ...cur, postId })
+        setSong((s) => (s?.id === cur.id ? { ...s, postId } : s))
+        queuePush({ ...cur, postId })
+      }
+      alert(song.postId ? '已更新社区里的版本。' : '已发布到社区。')
+    } catch (e) {
+      alert(`发布失败：${e instanceof Error ? e.message : e}`)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  async function withdrawSong() {
+    if (!song?.postId || !confirm('从社区撤回？已经复制的人不受影响。')) return
+    try {
+      await withdraw(song.postId)
+      await update({ postId: undefined })
+    } catch (e) {
+      alert(`撤回失败：${e instanceof Error ? e.message : e}`)
+    }
   }
 
   async function saveNew(s: Song, practice = true) {
@@ -317,6 +380,7 @@ export default function App() {
     if (!song) return
     const next = { ...song, ...patch }
     setSong(next)
+    if (listening) return // a community post being tried out is not in the library: nothing to save
     await saveSong(next)
     setSongs(await listSongs())
     queuePush(next)
@@ -418,6 +482,11 @@ export default function App() {
     const id = setInterval(() => player.playing && logPractice(5), 5000)
     return () => clearInterval(id)
   }, [])
+
+  // The community entry shows only when signed in and the community tables exist.
+  useEffect(() => {
+    void communityReady().then(setCommunityOn)
+  }, [user])
 
   // Nickname / avatar: the signed-in account's metadata wins (so it follows you between devices).
   useEffect(() => {
@@ -560,6 +629,9 @@ export default function App() {
   const hasAudio = TRACKS.some((k) => song.audio[k])
   const allTags = [...new Set(songs.flatMap((s) => s.tags ?? []))].sort()
   const allLists = [...new Set(songs.flatMap((s) => s.lists ?? []))].sort()
+  // Practising a community post without copying it: only while that post's song is the one open, so opening any
+  // library song (drawer, sync, ...) ends it by itself.
+  const listening = listenPost && song?.id === `listen:${listenPost.id}` ? listenPost : null
   const allArtists = [...new Set(songs.map((s) => s.artist).filter(Boolean))].sort()
   const qPos = queue && queue.ids.indexOf(song.id)
   const tracks = player.source.tracks
@@ -618,13 +690,26 @@ export default function App() {
     try {
       const differs = hit && (hit.title !== song!.title || hit.artist !== song!.artist)
       const rename = differs && confirm(`同时把歌名和歌手改成「${hit.title} · ${hit.artist}」吗？`)
-      await update({ cover: await toCover(src), ...(rename ? { title: hit.title, artist: hit.artist } : {}) })
+      await update({
+        cover: await toCover(src),
+        ...(hit ? { trackId: hit.trackId, aliases: hit.aliases } : {}),
+        ...(rename ? { title: hit.title, artist: hit.artist } : {}),
+      })
       setCoverHits(null)
     } catch (e) {
       alert(`封面读取失败：${e}`)
     } finally {
       setCoverBusy(false)
     }
+  }
+
+  // Lyrics search starts from the song's Japanese name when we know its Apple track (a Chinese or English
+  // title rarely finds the lyrics). ' ' keeps the panel open with an empty box.
+  async function openLyricFind() {
+    if (lyricFind) return setLyricFind('')
+    const own = song!.title === '新歌曲' ? '' : song!.title
+    const jp = song!.trackId ? await lookupJp(song!.trackId) : null
+    setLyricFind((jp ? `${jp.title} ${jp.artist}` : `${own} ${song!.artist}`).trim() || ' ')
   }
 
   async function findCovers() {
@@ -642,7 +727,10 @@ export default function App() {
     const audio = { ...song!.audio }
     if (file) audio[k] = file
     else delete audio[k]
-    await update({ audio, audioRev: { ...song!.audioRev, [k]: Date.now() } })
+    // A replaced (or removed) track is the user's own now: it no longer points at the community file.
+    const audioSrc = { ...song!.audioSrc }
+    delete audioSrc[k]
+    await update({ audio, audioRev: { ...song!.audioRev, [k]: Date.now() }, audioSrc })
     await player.load(k, file)
   }
 
@@ -1143,7 +1231,7 @@ export default function App() {
         <div className="cover-hits">
           {!coverHits.length && <p className="hint">没搜到，改一下歌名或歌手再搜，或者自己上传。</p>}
           {coverHits.map((h) => (
-            <button key={h.url} title={`${h.title} · ${h.artist}\n${h.album}`} disabled={coverBusy} onClick={() => setCover(h.url, h)}>
+            <button key={h.trackId} title={`${h.title} · ${h.artist}\n${h.album}`} disabled={coverBusy} onClick={() => setCover(h.url, h)}>
               <img src={h.url.replace('600x600bb', '200x200bb')} alt="" />
               <b>{h.title}</b>
               <span>{h.artist}</span>
@@ -1197,6 +1285,18 @@ export default function App() {
         </div>
         <span className="grow" />
         <span className="hint">{savedAt ? `已自动保存 ${new Date(savedAt).toLocaleTimeString()}` : '修改会自动保存'}</span>
+        {communityOn && (
+          <>
+            <button className="chip" disabled={publishing} title="把这首歌的快照发布到社区；之后的修改要再点一次才会更新" onClick={publishSong}>
+              {publishing ? '发布中…' : song.postId ? '更新发布' : '发布到社区'}
+            </button>
+            {song.postId && (
+              <button className="chip" disabled={publishing} onClick={withdrawSong}>
+                撤回
+              </button>
+            )}
+          </>
+        )}
         <button onClick={saveNow}>保存</button>
         <button className="primary" onClick={() => transition(() => setEditing(false))}>
           完成
@@ -1205,7 +1305,7 @@ export default function App() {
       {editTab === 'lyrics' && (
         <div className="pane box">
           <div className="chips">
-            <button className={`chip ${lyricFind ? 'on' : ''}`} onClick={() => setLyricFind(!lyricFind)}>
+            <button className={`chip ${lyricFind ? 'on' : ''}`} onClick={openLyricFind}>
               联网搜索歌词
             </button>
             <label className="button chip">
@@ -1221,13 +1321,13 @@ export default function App() {
           </div>
           {lyricFind && (
             <LyricsSearch
-              initial={`${song.title === '新歌曲' ? '' : song.title} ${song.artist}`.trim()}
+              initial={lyricFind}
               duration={player.duration || undefined}
               onPick={(h) => {
                 if (song.lines.some((l) => l.text) && !confirm(`用「${h.title} · ${h.artist}」的歌词替换现在的歌词？`)) return
                 setDraft(h.text)
                 update({ lines: parseLyrics(h.text) })
-                setLyricFind(false)
+                setLyricFind('')
               }}
             />
           )}
@@ -1337,15 +1437,26 @@ export default function App() {
             <button className={!editing ? 'on' : ''} onClick={() => editing && transition(() => setEditing(false))}>
               练习
             </button>
-            <button className={editing ? 'on' : ''} onClick={() => !editing && startEdit()}>
-              编辑
-            </button>
+            {listening ? (
+              <button className="on" disabled={publishing} onClick={() => copyPost(listening).catch((e) => alert(`加入失败：${e instanceof Error ? e.message : e}`))}>
+                试听中 · 加入我的曲库
+              </button>
+            ) : (
+              <button className={editing ? 'on' : ''} onClick={() => !editing && startEdit()}>
+                编辑
+              </button>
+            )}
           </nav>
         )}
         {user && (
           <span className={`sync ${syncState}`} title={syncState === 'error' ? syncError : undefined}>
             {{ idle: '已同步', syncing: '同步中…', error: `同步失败：${syncError}` }[syncState]}
           </span>
+        )}
+        {communityOn && (
+          <button className={`chip ${tab === 'community' ? 'on' : ''}`} title="社区" onClick={() => goTab(tab === 'community' ? 'library' : 'community')}>
+            社区
+          </button>
         )}
         <button className={`avatar-btn ${tab === 'profile' ? 'on' : ''}`} title="个人主页" onClick={() => goTab(tab === 'profile' ? 'library' : 'profile')}>
           <Avatar profile={profile} email={user} />
@@ -1444,7 +1555,17 @@ export default function App() {
         />
       )}
 
-      {tab === 'new' && <NewSong artists={allArtists} draft={newDraft} onDone={(s) => saveNew(s)} onCancel={() => goTab('library')} />}
+      {tab === 'community' && <Community initialGroup={communityGroup} onListen={listen} onCopy={copyPost} />}
+
+      {tab === 'new' && (
+        <NewSong
+          artists={allArtists}
+          draft={newDraft}
+          onDone={(s) => saveNew(s)}
+          onCancel={() => goTab('library')}
+          onCommunity={communityOn ? (g) => (setCommunityGroup(g), void goTab('community')) : undefined}
+        />
+      )}
 
       {tab === 'practice' && (
         <main className={`stage ${editing ? 'editing' : ''}`} onClick={() => coverPop && setCoverPop(false)}>
