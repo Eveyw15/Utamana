@@ -1,7 +1,7 @@
 // Run: node --test src/beat.test.ts
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { anchorFirst, beatGrid, parseSections, snapToBeat, tapFit } from './beat.ts'
+import { anchorFirst, beatGrid, beatPhase, parseSections, snapToBeat, tapFit } from './beat.ts'
 
 test('tapFit averages tap gaps and smooths the first beat', () => {
   assert.equal(tapFit([1]), null)
@@ -41,4 +41,13 @@ test('beatGrid accents bar starts across meter changes', () => {
   const grid = beatGrid([{ time: 0, bpm: 120, beats: 4 }, { time: 2, bpm: 120, beats: 3 }], 3.5, 10)
   assert.deepEqual(grid.map((c) => c.pos), [0, 5, 10, 15, 20, 25, 30])
   assert.deepEqual(grid.map((c) => c.accent), [true, false, false, false, true, false, false])
+})
+
+test('beatPhase is the fraction of the current beat, null without a running section', () => {
+  const s = [{ time: 1, bpm: 120, beats: 4 }, { time: 5, bpm: 0, beats: 4 }]
+  assert.equal(beatPhase([], 2), null)
+  assert.equal(beatPhase(s, 0.5), null) // before the first section
+  assert.equal(beatPhase(s, 1), 0)
+  assert.ok(Math.abs(beatPhase(s, 1.25)! - 0.5) < 1e-9) // 120 BPM: a beat is 0.5 s
+  assert.equal(beatPhase(s, 6), null) // BPM 0 section is silent
 })

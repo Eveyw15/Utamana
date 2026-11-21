@@ -23,3 +23,12 @@ export async function toCover(src: Blob | string) {
   canvas.getContext('2d')!.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, 300, 300)
   return canvas.toDataURL('image/jpeg', 0.8)
 }
+
+// Uploaded page background: keep the aspect ratio, long side at most 1920 px (~200-400 KB).
+export async function toBackground(src: Blob) {
+  const img = await createImageBitmap(src)
+  const k = Math.min(1, 1920 / Math.max(img.width, img.height))
+  const canvas = Object.assign(document.createElement('canvas'), { width: Math.round(img.width * k), height: Math.round(img.height * k) })
+  canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
+  return canvas.toDataURL('image/jpeg', 0.8)
+}
