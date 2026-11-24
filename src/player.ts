@@ -92,6 +92,66 @@ export class MixSource {
   }
 }
 
+// Album original and off-vocal files often start with different amounts of silence. Returns how many
+// samples x runs late against o (negative: early), or null when they don't look like the same song.
+// Coarse search on ~1 kHz block averages over +-2 s, then sample-exact around the best coarse lag.
+export function findLag(o: Float32Array, x: Float32Array, rate: number): number | null {
+  const score = (a: Float32Array, b: Float32Array, start: number, n: number, d: number) => {
+    let ab = 0, aa = 0, bb = 0
+    for (let i = start; i < start + n; i++) {
+      const u = a[i], v = b[i + d] ?? 0
+      ab += u * v
+      aa += u * u
+      bb += v * v
+    }
+    return ab / Math.sqrt(aa * bb + 1e-12)
+  }
+  const best = (a: Float32Array, b: Float32Array, start: number, n: number, from: number, to: number) => {
+    let at = 0, top = -Infinity
+    for (let d = from; d <= to; d++) {
+      const r = score(a, b, start, n, d)
+      if (r > top) (top = r), (at = d)
+    }
+    return [at, top]
+  }
+  const dec = Math.max(1, Math.round(rate / 1000))
+  const down = (s: Float32Array) => {
+    const out = new Float32Array(Math.floor(s.length / dec))
+    for (let i = 0; i < out.length; i++) {
+      let sum = 0
+      for (let j = 0; j < dec; j++) sum += s[i * dec + j]
+      out[i] = sum / dec
+    }
+    return out
+  }
+  const od = down(o), xd = down(x)
+  const maxLag = 2 * 1000
+  // 15 s of the original, from 20 s in (where both are playing) or as near as the song allows.
+  const n = Math.min(15 * 1000, od.length - 2 * maxLag)
+  if (n < 1000) return null
+  const start = Math.min(20 * 1000, od.length - n - maxLag)
+  const [coarse, r] = best(od, xd, start, n, -Math.min(maxLag, start), maxLag)
+  if (r < 0.3) return null
+  return best(o, x, start * dec, Math.min(3 * rate, n * dec), coarse * dec - dec, coarse * dec + dec)[0]
+}
+
+// Copy of buf moved earlier by lag samples (negative lag: later, padded with silence).
+function shifted(buf: AudioBuffer, lag: number) {
+  const out = new AudioBuffer({ length: Math.max(1, buf.length - lag), numberOfChannels: buf.numberOfChannels, sampleRate: buf.sampleRate })
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const d = buf.getChannelData(c)
+    if (lag >= 0) out.copyToChannel(d.subarray(lag), c)
+    else out.copyToChannel(d, c, -lag)
+  }
+  return out
+}
+
+const mono = (b: AudioBuffer) => {
+  if (b.numberOfChannels < 2) return b.getChannelData(0)
+  const l = b.getChannelData(0), r = b.getChannelData(1)
+  return l.map((v, i) => (v + r[i]) / 2)
+}
+
 export class Player {
   ctx = new AudioContext()
   source = Object.assign(new MixSource(), { sampleRate: this.ctx.sampleRate })
@@ -136,6 +196,15 @@ export class Player {
     if (blob) this.source.tracks[key] = await this.ctx.decodeAudioData(await blob.arrayBuffer())
     else delete this.source.tracks[key]
     if (key === 'original') this.source.karaoke = undefined
+    // Line the stems up with the original, which the lyric times are tapped against.
+    const { tracks } = this.source
+    const stems: TrackKey[] = key === 'original' ? ['vocals', 'instrumental'] : [key]
+    for (const k of stems) {
+      const buf = tracks[k]
+      if (!tracks.original || k === 'original' || !buf) continue
+      const lag = findLag(mono(tracks.original), mono(buf), this.sampleRate)
+      if (lag) tracks[k] = shifted(buf, lag)
+    }
     this.onState()
   }
 

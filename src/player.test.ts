@@ -24,3 +24,16 @@ test('loop wraps without a gap', () => {
   assert.deepEqual([...out].filter((_, i) => i % 2 === 0), [0, 1, 2, 1, 2, 1])
   assert.equal(m.wrap(8), 2)
 })
+
+test('findLag finds a constant offset between the original and a stem', async () => {
+  const { findLag } = await import('./player.ts')
+  const rate = 8000
+  let seed = 1
+  const noise = Float32Array.from({ length: rate * 40 }, () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1)
+  const late = new Float32Array(noise.length) // stem starts 0.3 s + 7 samples later
+  late.set(noise.subarray(0, noise.length - 2407), 2407)
+  assert.equal(findLag(noise, late, rate), 2407)
+  assert.equal(findLag(late, noise, rate), -2407)
+  assert.equal(findLag(noise, noise, rate), 0)
+  assert.equal(findLag(noise, Float32Array.from(noise, (_, i) => Math.sin(i)), rate), null) // different song
+})
