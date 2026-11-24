@@ -22,6 +22,7 @@ export type Song = {
   fav?: boolean
   lists?: string[] // names of the playlists the song is in
   audio: Partial<Record<TrackKey, Blob>>
+  stemShift?: number // seconds the vocal / backing stems start later than the original; unset: detected on load
   audioRev?: Partial<Record<TrackKey, number>> // bumped when a track is replaced, so sync knows what to upload
   audioSrc?: Partial<Record<TrackKey, string>> // copied from the community: track file in the community bucket (not re-uploaded)
   postId?: string // this song's own community post, if published

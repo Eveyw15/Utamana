@@ -192,20 +192,47 @@ export class Player {
     this.seek(loop && (now < range![0] || now >= range![1]) ? range![0] : now)
   }
 
+  // Stems as decoded, before shifting, and the detected lag (samples) of each against the original.
+  raw: Partial<Record<TrackKey, AudioBuffer>> = {}
+  autoLag: Partial<Record<TrackKey, number>> = {}
+  // Manual stem offset in seconds (how much later the stems start than the original); null: detect it.
+  stemShift: number | null = null
+
   async load(key: TrackKey, blob: Blob | undefined) {
-    if (blob) this.source.tracks[key] = await this.ctx.decodeAudioData(await blob.arrayBuffer())
-    else delete this.source.tracks[key]
+    if (blob) this.raw[key] = await this.ctx.decodeAudioData(await blob.arrayBuffer())
+    else delete this.raw[key]
     if (key === 'original') this.source.karaoke = undefined
-    // Line the stems up with the original, which the lyric times are tapped against.
-    const { tracks } = this.source
-    const stems: TrackKey[] = key === 'original' ? ['vocals', 'instrumental'] : [key]
-    for (const k of stems) {
-      const buf = tracks[k]
-      if (!tracks.original || k === 'original' || !buf) continue
-      const lag = findLag(mono(tracks.original), mono(buf), this.sampleRate)
+    // A new original changes every stem's lag; a new stem only its own.
+    if (key === 'original') this.autoLag = {}
+    else delete this.autoLag[key]
+    this.align()
+  }
+
+  // Line the stems up with the original, which the lyric times are tapped against.
+  align() {
+    const { raw } = this
+    const tracks = (this.source.tracks = { ...raw })
+    for (const k of ['vocals', 'instrumental'] as const) {
+      const buf = raw[k]
+      if (!raw.original || !buf) continue
+      if (this.stemShift == null) this.autoLag[k] ??= findLag(mono(raw.original), mono(buf), this.sampleRate) ?? 0
+      const lag = this.stemShift == null ? this.autoLag[k]! : Math.round(this.stemShift * this.sampleRate)
       if (lag) tracks[k] = shifted(buf, lag)
     }
     this.onState()
+  }
+
+  // Applied stem offset in seconds (the manual one, or the detected one), for the settings field.
+  get stemLag() {
+    if (this.stemShift != null) return this.stemShift
+    const k = this.raw.instrumental ? 'instrumental' : 'vocals'
+    return (this.autoLag[k] ?? 0) / this.sampleRate
+  }
+
+  // Offset that lines up the ends instead: a longer stem has that much more silence at the start.
+  get tailLag() {
+    const stem = this.raw.instrumental ?? this.raw.vocals
+    return stem && this.raw.original ? (stem.length - this.raw.original.length) / this.sampleRate : 0
   }
 
   // Original-only songs: subtract the centre (L+R)/2 only between 150 Hz and 7 kHz, where the voice is.
@@ -267,6 +294,8 @@ export class Player {
   clear() {
     this.pause()
     this.source.tracks = {}
+    this.raw = {}
+    this.autoLag = {}
     this.seek(0)
   }
 

@@ -479,7 +479,16 @@ export default function App() {
     setCoverHits(null)
     beforeAlign.current = null
     player.source.vocal = 1
+    player.stemShift = s.stemShift ?? null
     for (const k of TRACKS) await player.load(k, s.audio[k])
+  }
+
+  // Manual stem offset (seconds), or undefined to detect it again.
+  function setStemShift(v: number | undefined) {
+    if (v != null && !Number.isFinite(v)) return
+    player.stemShift = v ?? null
+    player.align()
+    void update({ stemShift: v })
   }
 
   async function update(patch: Partial<Song>) {
@@ -1519,6 +1528,28 @@ export default function App() {
               )}
             </div>
           ))}
+          {player.raw.original && (player.raw.instrumental || player.raw.vocals) && (
+            <div className="track-row">
+              <b>对齐</b>
+              <label className="hint grow">
+                伴奏/人声比原曲晚{' '}
+                <input
+                  type="number"
+                  step={10}
+                  style={{ width: 90 }}
+                  value={Math.round(player.stemLag * 1000)}
+                  onChange={(e) => setStemShift(+e.target.value / 1000)}
+                />{' '}
+                ms{song.stemShift == null && '（自动检测）'}
+              </label>
+              <button className="chip" onClick={() => setStemShift(Math.round(player.tailLag * 1000) / 1000)}>
+                按结尾对齐
+              </button>
+              <button className="chip" disabled={song.stemShift == null} onClick={() => setStemShift(undefined)}>
+                自动
+              </button>
+            </div>
+          )}
           <label
             className="drop"
             onDragOver={(e) => e.preventDefault()}
